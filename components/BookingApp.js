@@ -31,6 +31,11 @@ function useIsMobile() {
 
 // ── Toast ──────────────────────────────────────────────────────
 function Toast({ msg, type }) {
+  const isInfo = type === "info";
+  const isError = type === "error";
+  const bg = isError ? "#7f1d1d" : isInfo ? "#0f1a0f" : "#1a3d1a";
+  const border = isError ? "#dc2626" : isInfo ? "#2d4a2d" : "#4ade80";
+  const icon = isError ? "⚠ " : isInfo ? "" : "✓ ";
   return (
     <div
       style={{
@@ -39,56 +44,24 @@ function Toast({ msg, type }) {
         left: "50%",
         transform: "translateX(-50%)",
         zIndex: 9998,
-        background: type === "error" ? "#7f1d1d" : "#1a3d1a",
+        background: bg,
         color: "#e8dcc8",
-        padding: "12px 20px",
+        padding: "10px 18px",
         borderRadius: 24,
-        fontSize: 14,
+        fontSize: 13,
         fontFamily: "Georgia, serif",
-        border: `1px solid ${type === "error" ? "#dc2626" : "#4ade80"}`,
-        boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+        border: `1px solid ${border}`,
+        boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
         whiteSpace: "nowrap",
-        animation: "fadeIn 0.2s ease",
+        animation: "fadeIn 0.3s ease",
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
       }}
     >
-      {type === "error" ? "⚠ " : "✓ "}
+      {icon}
       {msg}
     </div>
-  );
-}
-
-// ── DB Status Badge ────────────────────────────────────────────
-function DbBadge({ source, loading }) {
-  if (loading)
-    return (
-      <span
-        style={{
-          fontSize: 11,
-          padding: "4px 10px",
-          borderRadius: 20,
-          background: "#1a2e1a",
-          color: "#6a9c6a",
-          border: "1px solid #2d4a2d",
-          fontFamily: "Georgia, serif",
-        }}
-      >
-        ⏳ Connecting...
-      </span>
-    );
-  return (
-    <span
-      style={{
-        fontSize: 11,
-        padding: "4px 10px",
-        borderRadius: 20,
-        fontFamily: "Georgia, serif",
-        background: source === "mongodb" ? "#1a3d1a" : "#2a2000",
-        color: source === "mongodb" ? "#4ade80" : "#fbbf24",
-        border: `1px solid ${source === "mongodb" ? "#4ade80" : "#f59e0b"}`,
-      }}
-    >
-      {source === "mongodb" ? "🟢 MongoDB" : "🟡 Offline (localStorage)"}
-    </span>
   );
 }
 
@@ -1336,7 +1309,6 @@ function ReportView({ bookings, downloading, onDownload, isMobile }) {
 export default function BookingApp() {
   const isMobile = useIsMobile();
   const [bookings, setBookings] = useState([]);
-  const [dbSource, setDbSource] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [view, setView] = useState("dashboard");
@@ -1379,8 +1351,12 @@ export default function BookingApp() {
       setLoading(true);
       const { data, source } = await apiGetBookings();
       setBookings(data);
-      setDbSource(source);
       setLoading(false);
+      if (source === "mongodb") {
+        showToast("Connected to database", "info");
+      } else {
+        showToast("Offline — using local data", "error");
+      }
     })();
   }, []);
 
@@ -1401,7 +1377,6 @@ export default function BookingApp() {
           tubes: Number(formData.tubes),
         });
         setBookings((prev) => prev.map((b) => (b.id === editId ? data : b)));
-        setDbSource(source);
         showToast("Booking updated!");
         setEditId(null);
       } else {
@@ -1410,7 +1385,6 @@ export default function BookingApp() {
           tubes: Number(formData.tubes),
         });
         setBookings((prev) => [data, ...prev]);
-        setDbSource(source);
         showToast("Booking saved!");
       }
       setForm(EMPTY_FORM);
@@ -1437,7 +1411,6 @@ export default function BookingApp() {
   const handleDelete = async (id) => {
     const { source } = await apiDeleteBooking(id);
     setBookings((prev) => prev.filter((b) => b.id !== id));
-    setDbSource(source);
     setDeleteId(null);
     showToast("Booking deleted.", "error");
   };
@@ -1541,7 +1514,6 @@ export default function BookingApp() {
                 >
                   Miru Mushrooms
                 </div>
-                <DbBadge source={dbSource} loading={loading} />
               </div>
             </div>
             <button
@@ -1903,7 +1875,6 @@ export default function BookingApp() {
                 Booking Manager
               </div>
             </div>
-            <DbBadge source={dbSource} loading={loading} />
           </div>
           <nav style={{ display: "flex", gap: 4 }}>
             {[
