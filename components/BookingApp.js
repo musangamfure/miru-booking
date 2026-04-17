@@ -2158,6 +2158,404 @@ function ReportView({ bookings, downloading, onDownload, isMobile }) {
           </div>
         </div>
       )}
+
+      {/* ── Delivery Report Section ── */}
+      {bookings.some((b) => (b.deliveries || []).length > 0) && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            marginTop: 8,
+            marginBottom: 4,
+          }}
+        >
+          <div style={{ flex: 1, height: 1, background: "#2d4a2d" }} />
+          <h2
+            style={{
+              margin: 0,
+              fontSize: 16,
+              color: "#c8e6c9",
+              whiteSpace: "nowrap",
+            }}
+          >
+            🚚 Delivery Report
+          </h2>
+          <div style={{ flex: 1, height: 1, background: "#2d4a2d" }} />
+        </div>
+      )}
+      {(() => {
+        const withDeliveries = bookings.filter(
+          (b) => (b.deliveries || []).length > 0
+        );
+        if (withDeliveries.length === 0) return null;
+
+        const totalDelivered = withDeliveries.reduce(
+          (s, b) => s + (b.tubesDelivered || 0),
+          0
+        );
+        const totalBooked = bookings.reduce((s, b) => s + b.tubes, 0);
+        const fullyDone = withDeliveries.filter(
+          (b) => (b.tubesPending || 0) === 0
+        ).length;
+        const partialCount = withDeliveries.length - fullyDone;
+        const pctOverall = totalBooked
+          ? Math.round((totalDelivered / totalBooked) * 100)
+          : 0;
+
+        return (
+          <>
+            {/* Delivery KPI strip */}
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4,1fr)",
+                gap: 12,
+                marginBottom: 20,
+                marginTop: 8,
+              }}
+            >
+              {[
+                {
+                  label: "Tubes Delivered",
+                  value: totalDelivered.toLocaleString(),
+                  accent: "#4a7c59",
+                },
+                {
+                  label: "Tubes Pending",
+                  value: (totalBooked - totalDelivered).toLocaleString(),
+                  accent: "#f59e0b",
+                },
+                {
+                  label: "Fully Delivered",
+                  value: fullyDone,
+                  accent: "#1b4332",
+                },
+                { label: "Partial", value: partialCount, accent: "#2d6a4f" },
+              ].map((k) => (
+                <div
+                  key={k.label}
+                  style={{
+                    background: "#1a2e1a",
+                    border: `1px solid ${k.accent}`,
+                    borderRadius: 12,
+                    padding: "12px 16px",
+                    borderLeft: `4px solid ${k.accent}`,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: isMobile ? 18 : 22,
+                      fontWeight: "bold",
+                      color: "#c8e6c9",
+                    }}
+                  >
+                    {k.value}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#6a9c6a",
+                      marginTop: 3,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.8,
+                    }}
+                  >
+                    {k.label}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Overall progress bar */}
+            <div
+              style={{
+                background: "#1a2e1a",
+                border: "1px solid #2d4a2d",
+                borderRadius: 12,
+                padding: 20,
+                marginBottom: 20,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 10,
+                }}
+              >
+                <h2 style={{ margin: 0, fontSize: 15, color: "#c8e6c9" }}>
+                  Overall Delivery Progress
+                </h2>
+                <span
+                  style={{
+                    fontSize: 14,
+                    fontWeight: "bold",
+                    color: pctOverall === 100 ? "#4ade80" : "#fbbf24",
+                  }}
+                >
+                  {pctOverall}%
+                </span>
+              </div>
+              <div
+                style={{
+                  background: "#2d4a2d",
+                  borderRadius: 6,
+                  height: 14,
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    background: pctOverall === 100 ? "#4ade80" : "#fbbf24",
+                    height: "100%",
+                    borderRadius: 6,
+                    width: `${pctOverall}%`,
+                    transition: "width 0.4s",
+                  }}
+                />
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: 12,
+                  color: "#6a9c6a",
+                  marginTop: 6,
+                }}
+              >
+                <span>{totalDelivered.toLocaleString()} tubes delivered</span>
+                <span>
+                  {(totalBooked - totalDelivered).toLocaleString()} tubes
+                  remaining
+                </span>
+              </div>
+            </div>
+
+            {/* Per-farmer delivery table */}
+            <div
+              style={{
+                background: "#1a2e1a",
+                border: "1px solid #2d4a2d",
+                borderRadius: 12,
+                padding: 20,
+                marginBottom: 20,
+              }}
+            >
+              <h2
+                style={{ margin: "0 0 14px", fontSize: 15, color: "#c8e6c9" }}
+              >
+                Delivery Progress per Farmer
+              </h2>
+              <div style={{ overflowX: "auto" }}>
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    minWidth: 480,
+                  }}
+                >
+                  <thead>
+                    <tr>
+                      {[
+                        "Farmer",
+                        "Location",
+                        "Booked",
+                        "Delivered",
+                        "Remaining",
+                        "Progress",
+                      ].map((h) => (
+                        <th key={h} style={thStyle}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {withDeliveries
+                      .sort(
+                        (a, b) =>
+                          (b.tubesDelivered || 0) - (a.tubesDelivered || 0)
+                      )
+                      .map((b, i) => {
+                        const pct = b.tubes
+                          ? Math.round(
+                              ((b.tubesDelivered || 0) / b.tubes) * 100
+                            )
+                          : 0;
+                        const done = (b.tubesPending || 0) === 0;
+                        return (
+                          <tr key={b.id}>
+                            <td style={{ ...tdStyle(i), fontWeight: "bold" }}>
+                              {b.name}
+                              <div
+                                style={{
+                                  fontSize: 11,
+                                  color: "#6a9c6a",
+                                  fontWeight: "normal",
+                                }}
+                              >
+                                📍 {b.location}
+                              </div>
+                            </td>
+                            <td style={tdStyle(i)}>{b.location}</td>
+                            <td style={tdNum(i)}>{b.tubes.toLocaleString()}</td>
+                            <td style={{ ...tdNum(i), color: "#4ade80" }}>
+                              {(b.tubesDelivered || 0).toLocaleString()}
+                            </td>
+                            <td
+                              style={{
+                                ...tdNum(i),
+                                color: done ? "#4ade80" : "#fbbf24",
+                              }}
+                            >
+                              {(b.tubesPending || 0).toLocaleString()}
+                            </td>
+                            <td style={tdStyle(i)}>
+                              <div
+                                style={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: 8,
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    flex: 1,
+                                    background: "#2d4a2d",
+                                    borderRadius: 3,
+                                    height: 7,
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      background: done ? "#4ade80" : "#fbbf24",
+                                      height: "100%",
+                                      borderRadius: 3,
+                                      width: `${pct}%`,
+                                    }}
+                                  />
+                                </div>
+                                <span
+                                  style={{
+                                    fontSize: 12,
+                                    color: done ? "#4ade80" : "#fbbf24",
+                                    minWidth: 34,
+                                  }}
+                                >
+                                  {pct}%
+                                </span>
+                                {done && (
+                                  <span
+                                    style={{
+                                      fontSize: 10,
+                                      padding: "2px 7px",
+                                      borderRadius: 20,
+                                      background: "#1a3d1a",
+                                      color: "#4ade80",
+                                      border: "1px solid #4ade80",
+                                    }}
+                                  >
+                                    ✓
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Delivery log */}
+            <div
+              style={{
+                background: "#1a2e1a",
+                border: "1px solid #2d4a2d",
+                borderRadius: 12,
+                padding: 20,
+                marginBottom: 20,
+              }}
+            >
+              <h2
+                style={{ margin: "0 0 14px", fontSize: 15, color: "#c8e6c9" }}
+              >
+                Full Delivery Log
+              </h2>
+              <div style={{ overflowX: "auto" }}>
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    minWidth: 480,
+                  }}
+                >
+                  <thead>
+                    <tr>
+                      {[
+                        "Farmer",
+                        "Location",
+                        "Tubes",
+                        "Date Delivered",
+                        "Note",
+                      ].map((h) => (
+                        <th key={h} style={thStyle}>
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {withDeliveries
+                      .flatMap((b) =>
+                        (b.deliveries || []).map((d, j) => ({
+                          ...d,
+                          farmerName: b.name,
+                          location: b.location,
+                          bookingId: b.id + j,
+                        }))
+                      )
+                      .sort(
+                        (a, b) =>
+                          new Date(b.deliveredAt) - new Date(a.deliveredAt)
+                      )
+                      .map((d, i) => (
+                        <tr key={d.bookingId + i}>
+                          <td style={{ ...tdStyle(i), fontWeight: "bold" }}>
+                            {d.farmerName}
+                          </td>
+                          <td style={tdStyle(i)}>{d.location}</td>
+                          <td style={tdNum(i)}>
+                            {d.tubesDelivered.toLocaleString()}
+                          </td>
+                          <td style={{ ...tdStyle(i), color: "#4ade80" }}>
+                            {formatDate(
+                              new Date(d.deliveredAt)
+                                .toISOString()
+                                .split("T")[0]
+                            )}
+                          </td>
+                          <td
+                            style={{
+                              ...tdStyle(i),
+                              color: "#6a9c6a",
+                              fontStyle: d.note ? "normal" : "italic",
+                            }}
+                          >
+                            {d.note || "—"}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }
