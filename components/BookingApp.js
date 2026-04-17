@@ -15,6 +15,7 @@ import {
   apiCreateBooking,
   apiUpdateBooking,
   apiDeleteBooking,
+  apiRecordDelivery,
 } from "@/lib/api";
 
 // ── useIsMobile ────────────────────────────────────────────────
@@ -577,7 +578,7 @@ function BookingForm({ form, setForm, editId, onSave, onCancel, saving }) {
 }
 
 // ── Mobile Booking Card ────────────────────────────────────────
-function MobileBookingCard({ b, onEdit, onDelete, onWhatsApp }) {
+function MobileBookingCard({ b, onEdit, onDelete, onWhatsApp, onDeliver }) {
   return (
     <div
       style={{
@@ -659,22 +660,60 @@ function MobileBookingCard({ b, onEdit, onDelete, onWhatsApp }) {
           </span>
         ))}
       </div>
+      {/* Delivery progress */}
+      {(b.tubesDelivered || 0) > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: 11,
+              color: "#6a9c6a",
+              marginBottom: 4,
+            }}
+          >
+            <span>
+              Delivered:{" "}
+              <b style={{ color: "#4ade80" }}>
+                {b.tubesDelivered.toLocaleString()}
+              </b>
+            </span>
+            <span>
+              Remaining:{" "}
+              <b style={{ color: "#fbbf24" }}>
+                {b.tubesPending.toLocaleString()}
+              </b>
+            </span>
+          </div>
+          <div style={{ background: "#2d4a2d", borderRadius: 4, height: 5 }}>
+            <div
+              style={{
+                background: b.tubesPending === 0 ? "#4ade80" : "#fbbf24",
+                height: "100%",
+                borderRadius: 4,
+                width: `${Math.round((b.tubesDelivered / b.tubes) * 100)}%`,
+              }}
+            />
+          </div>
+        </div>
+      )}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: "1fr auto auto",
+          gridTemplateColumns: "1fr 1fr",
           gap: 8,
+          marginBottom: 8,
         }}
       >
         <button
           onClick={() => onWhatsApp(b)}
           style={{
-            padding: "12px 0",
+            padding: "11px 0",
             borderRadius: 10,
             border: "none",
             background: "#25D366",
             color: "white",
-            fontSize: 14,
+            fontSize: 13,
             fontWeight: "bold",
             cursor: "pointer",
             fontFamily: "Georgia, serif",
@@ -683,29 +722,48 @@ function MobileBookingCard({ b, onEdit, onDelete, onWhatsApp }) {
           💬 WhatsApp
         </button>
         <button
+          onClick={() => onDeliver(b)}
+          disabled={b.tubesPending === 0}
+          style={{
+            padding: "11px 0",
+            borderRadius: 10,
+            border: "none",
+            background: b.tubesPending === 0 ? "#1a2e1a" : "#2d6a4f",
+            color: b.tubesPending === 0 ? "#4a7c59" : "white",
+            fontSize: 13,
+            fontWeight: "bold",
+            cursor: b.tubesPending === 0 ? "not-allowed" : "pointer",
+            fontFamily: "Georgia, serif",
+          }}
+        >
+          {b.tubesPending === 0 ? "✓ Delivered" : "🚚 Deliver"}
+        </button>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+        <button
           onClick={() => onEdit(b)}
           style={{
-            padding: "12px 14px",
+            padding: "9px 0",
             borderRadius: 10,
             border: "1px solid #2d4a2d",
             background: "transparent",
             color: "#9ab89a",
-            fontSize: 14,
+            fontSize: 13,
             cursor: "pointer",
             fontFamily: "Georgia, serif",
           }}
         >
-          ✏
+          ✏ Edit
         </button>
         <button
           onClick={() => onDelete(b.id)}
           style={{
-            padding: "12px 14px",
+            padding: "9px 14px",
             borderRadius: 10,
             border: "1px solid #7f1d1d",
             background: "transparent",
             color: "#f87171",
-            fontSize: 14,
+            fontSize: 13,
             cursor: "pointer",
             fontFamily: "Georgia, serif",
           }}
@@ -718,7 +776,7 @@ function MobileBookingCard({ b, onEdit, onDelete, onWhatsApp }) {
 }
 
 // ── Desktop Booking Row ────────────────────────────────────────
-function DesktopBookingRow({ b, onEdit, onDelete, onWhatsApp }) {
+function DesktopBookingRow({ b, onEdit, onDelete, onWhatsApp, onDeliver }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     navigator.clipboard.writeText(buildWhatsAppMessage(b)).then(() => {
@@ -815,6 +873,44 @@ function DesktopBookingRow({ b, onEdit, onDelete, onWhatsApp }) {
               RWF {(b.tubes * PRICE_PER_TUBE).toLocaleString()}
             </div>
           </div>
+          {/* Mini progress bar */}
+          {(b.tubesDelivered || 0) > 0 && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                marginBottom: 4,
+              }}
+            >
+              <div
+                style={{
+                  width: 100,
+                  background: "#2d4a2d",
+                  borderRadius: 3,
+                  height: 5,
+                }}
+              >
+                <div
+                  style={{
+                    background: b.tubesPending === 0 ? "#4ade80" : "#fbbf24",
+                    height: "100%",
+                    borderRadius: 3,
+                    width: `${Math.round((b.tubesDelivered / b.tubes) * 100)}%`,
+                  }}
+                />
+              </div>
+              <span
+                style={{
+                  fontSize: 11,
+                  color: b.tubesPending === 0 ? "#4ade80" : "#fbbf24",
+                }}
+              >
+                {b.tubesDelivered.toLocaleString()} / {b.tubes.toLocaleString()}{" "}
+                delivered
+              </span>
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8 }}>
             <button
               onClick={() => onWhatsApp(b)}
@@ -831,6 +927,23 @@ function DesktopBookingRow({ b, onEdit, onDelete, onWhatsApp }) {
               }}
             >
               💬 WhatsApp
+            </button>
+            <button
+              onClick={() => onDeliver(b)}
+              disabled={b.tubesPending === 0}
+              style={{
+                padding: "7px 12px",
+                borderRadius: 7,
+                border: "none",
+                background: b.tubesPending === 0 ? "#1a2e1a" : "#2d6a4f",
+                color: b.tubesPending === 0 ? "#4a7c59" : "white",
+                fontSize: 12,
+                fontWeight: "bold",
+                cursor: b.tubesPending === 0 ? "not-allowed" : "pointer",
+                fontFamily: "Georgia, serif",
+              }}
+            >
+              {b.tubesPending === 0 ? "✓ Done" : "🚚 Deliver"}
             </button>
             <button
               onClick={handleCopy}
@@ -885,6 +998,749 @@ function DesktopBookingRow({ b, onEdit, onDelete, onWhatsApp }) {
 }
 
 // ── Main App ───────────────────────────────────────────────────
+
+// ── Delivery Modal ─────────────────────────────────────────────
+function DeliveryModal({ booking, onConfirm, onCancel, isMobile }) {
+  const remaining =
+    booking.tubesPending ?? booking.tubes - (booking.tubesDelivered || 0);
+  const [amount, setAmount] = useState(String(remaining));
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+
+  const handleConfirm = () => {
+    const n = Number(amount);
+    if (!amount || isNaN(n) || n < 1) {
+      setError("Enter a valid number of tubes.");
+      return;
+    }
+    if (n > remaining) {
+      setError(`Only ${remaining} tubes remaining.`);
+      return;
+    }
+    onConfirm(n, note);
+  };
+
+  const panelStyle = isMobile
+    ? {
+        width: "100%",
+        background: "#1a2e1a",
+        borderRadius: "20px 20px 0 0",
+        padding: "20px 20px calc(20px + env(safe-area-inset-bottom,0px))",
+      }
+    : {
+        background: "#1a2e1a",
+        border: "1px solid #4a7c59",
+        borderRadius: 14,
+        padding: 28,
+        maxWidth: 420,
+        width: "90%",
+        boxShadow: "0 24px 60px rgba(0,0,0,0.5)",
+      };
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.8)",
+        zIndex: 9999,
+        display: "flex",
+        alignItems: isMobile ? "flex-end" : "center",
+        justifyContent: "center",
+      }}
+      onClick={(e) => e.target === e.currentTarget && onCancel()}
+    >
+      <div style={{ ...panelStyle, fontFamily: "Georgia, serif" }}>
+        {isMobile && (
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              marginBottom: 12,
+            }}
+          >
+            <div
+              style={{
+                width: 40,
+                height: 4,
+                borderRadius: 2,
+                background: "#4a7c59",
+              }}
+            />
+          </div>
+        )}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 16,
+          }}
+        >
+          <div>
+            <div style={{ fontSize: 16, fontWeight: "bold", color: "#c8e6c9" }}>
+              🚚 Record Delivery
+            </div>
+            <div style={{ fontSize: 12, color: "#6a9c6a", marginTop: 3 }}>
+              {booking.name} · {remaining.toLocaleString()} tubes remaining
+            </div>
+          </div>
+          <button
+            onClick={onCancel}
+            style={{
+              width: 30,
+              height: 30,
+              borderRadius: "50%",
+              border: "none",
+              background: "#2d4a2d",
+              color: "#c8e6c9",
+              fontSize: 16,
+              cursor: "pointer",
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Progress bar */}
+        <div
+          style={{
+            background: "#0f1a0f",
+            borderRadius: 8,
+            padding: "10px 14px",
+            marginBottom: 16,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              fontSize: 12,
+              color: "#6a9c6a",
+              marginBottom: 6,
+            }}
+          >
+            <span>
+              Delivered:{" "}
+              <b style={{ color: "#4ade80" }}>
+                {(booking.tubesDelivered || 0).toLocaleString()}
+              </b>
+            </span>
+            <span>
+              Remaining:{" "}
+              <b style={{ color: "#fbbf24" }}>{remaining.toLocaleString()}</b>
+            </span>
+            <span>
+              Total:{" "}
+              <b style={{ color: "#c8e6c9" }}>
+                {booking.tubes.toLocaleString()}
+              </b>
+            </span>
+          </div>
+          <div
+            style={{
+              background: "#2d4a2d",
+              borderRadius: 4,
+              height: 8,
+              overflow: "hidden",
+            }}
+          >
+            <div
+              style={{
+                background: "#4ade80",
+                height: "100%",
+                borderRadius: 4,
+                width: `${Math.round(
+                  ((booking.tubesDelivered || 0) / booking.tubes) * 100
+                )}%`,
+                transition: "width 0.3s",
+              }}
+            />
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label
+            style={{
+              display: "block",
+              fontSize: 11,
+              color: "#9ab89a",
+              marginBottom: 6,
+              textTransform: "uppercase",
+              letterSpacing: 0.8,
+            }}
+          >
+            Tubes Being Delivered
+          </label>
+          <input
+            type="number"
+            value={amount}
+            min="1"
+            max={remaining}
+            onChange={(e) => {
+              setAmount(e.target.value);
+              setError("");
+            }}
+            style={{
+              width: "100%",
+              padding: "12px 14px",
+              borderRadius: 10,
+              border: `1px solid ${error ? "#dc2626" : "#2d4a2d"}`,
+              background: "#0f1a0f",
+              color: "#e8dcc8",
+              fontSize: 16,
+              fontFamily: "Georgia, serif",
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+          />
+          {error && (
+            <div style={{ color: "#f87171", fontSize: 12, marginTop: 4 }}>
+              ⚠ {error}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            {[25, 50, 100].map((q) => (
+              <button
+                key={q}
+                onClick={() => {
+                  setAmount(String(Math.min(q, remaining)));
+                  setError("");
+                }}
+                style={{
+                  padding: "5px 12px",
+                  borderRadius: 20,
+                  border: "1px solid #2d4a2d",
+                  background: "transparent",
+                  color: "#9ab89a",
+                  fontSize: 12,
+                  cursor: "pointer",
+                  fontFamily: "Georgia, serif",
+                }}
+              >
+                {q}
+              </button>
+            ))}
+            <button
+              onClick={() => {
+                setAmount(String(remaining));
+                setError("");
+              }}
+              style={{
+                padding: "5px 12px",
+                borderRadius: 20,
+                border: "1px solid #4a7c59",
+                background: "transparent",
+                color: "#4ade80",
+                fontSize: 12,
+                cursor: "pointer",
+                fontFamily: "Georgia, serif",
+              }}
+            >
+              All ({remaining})
+            </button>
+          </div>
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <label
+            style={{
+              display: "block",
+              fontSize: 11,
+              color: "#9ab89a",
+              marginBottom: 6,
+              textTransform: "uppercase",
+              letterSpacing: 0.8,
+            }}
+          >
+            Note (optional)
+          </label>
+          <input
+            type="text"
+            value={note}
+            placeholder="e.g. First batch — Musanze route"
+            onChange={(e) => setNote(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "11px 14px",
+              borderRadius: 10,
+              border: "1px solid #2d4a2d",
+              background: "#0f1a0f",
+              color: "#e8dcc8",
+              fontSize: 14,
+              fontFamily: "Georgia, serif",
+              outline: "none",
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            onClick={onCancel}
+            style={{
+              flex: 1,
+              padding: 13,
+              borderRadius: 10,
+              border: "1px solid #2d4a2d",
+              background: "transparent",
+              color: "#9ab89a",
+              fontSize: 15,
+              cursor: "pointer",
+              fontFamily: "Georgia, serif",
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleConfirm}
+            style={{
+              flex: 2,
+              padding: 13,
+              borderRadius: 10,
+              border: "none",
+              background: "#4a7c59",
+              color: "white",
+              fontSize: 15,
+              fontWeight: "bold",
+              cursor: "pointer",
+              fontFamily: "Georgia, serif",
+            }}
+          >
+            Confirm Delivery
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Delivered View ─────────────────────────────────────────────
+function DeliveredView({ bookings, isMobile }) {
+  const [search, setSearch] = useState("");
+
+  // Only bookings that have at least one delivery
+  const withDeliveries = bookings.filter(
+    (b) => (b.deliveries || []).length > 0
+  );
+  const filtered = withDeliveries.filter(
+    (b) =>
+      b.name.toLowerCase().includes(search.toLowerCase()) ||
+      b.location.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const totalDelivered = withDeliveries.reduce(
+    (s, b) => s + (b.tubesDelivered || 0),
+    0
+  );
+  const fullyDelivered = withDeliveries.filter(
+    (b) => (b.tubesPending || 0) === 0
+  ).length;
+
+  const thStyle = {
+    background: "#1a2e1a",
+    padding: "8px 10px",
+    fontSize: 11,
+    color: "#9ab89a",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    borderBottom: "2px solid #4a7c59",
+    textAlign: "left",
+    fontFamily: "Georgia, serif",
+  };
+  const tdStyle = (i) => ({
+    padding: "9px 10px",
+    fontSize: 13,
+    color: "#c8e6c9",
+    borderBottom: "1px solid #2d4a2d",
+    background: i % 2 === 0 ? "#1a2e1a" : "#0f1a0f",
+    fontFamily: "Georgia, serif",
+    verticalAlign: "top",
+  });
+
+  return (
+    <div style={{ paddingBottom: isMobile ? 80 : 0 }}>
+      {/* Summary strip */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)",
+          gap: 12,
+          marginBottom: 20,
+        }}
+      >
+        {[
+          {
+            label: "Farmers Served",
+            value: withDeliveries.length,
+            accent: "#4a7c59",
+          },
+          {
+            label: "Tubes Delivered",
+            value: totalDelivered.toLocaleString(),
+            accent: "#2d6a4f",
+          },
+          {
+            label: "Fully Completed",
+            value: fullyDelivered,
+            accent: "#1b4332",
+          },
+        ].map((k) => (
+          <div
+            key={k.label}
+            style={{
+              background: "#1a2e1a",
+              border: `1px solid ${k.accent}`,
+              borderRadius: 12,
+              padding: "14px 18px",
+              borderLeft: `4px solid ${k.accent}`,
+            }}
+          >
+            <div
+              style={{
+                fontSize: isMobile ? 20 : 24,
+                fontWeight: "bold",
+                color: "#c8e6c9",
+              }}
+            >
+              {k.value}
+            </div>
+            <div
+              style={{
+                fontSize: 11,
+                color: "#6a9c6a",
+                marginTop: 4,
+                textTransform: "uppercase",
+                letterSpacing: 0.8,
+              }}
+            >
+              {k.label}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <input
+        placeholder="🔍 Search farmer or location..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        style={{
+          width: "100%",
+          padding: "11px 14px",
+          borderRadius: 10,
+          border: "1px solid #2d4a2d",
+          background: "#1a2e1a",
+          color: "#e8dcc8",
+          fontSize: 14,
+          fontFamily: "Georgia, serif",
+          outline: "none",
+          marginBottom: 16,
+          boxSizing: "border-box",
+        }}
+      />
+
+      {filtered.length === 0 ? (
+        <div
+          style={{ textAlign: "center", padding: "60px 0", color: "#4a7c59" }}
+        >
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📦</div>
+          <div style={{ fontSize: 16 }}>
+            {search ? "No results found." : "No deliveries recorded yet."}
+          </div>
+        </div>
+      ) : isMobile ? (
+        // Mobile cards
+        filtered.map((b) => {
+          const pct = Math.round(((b.tubesDelivered || 0) / b.tubes) * 100);
+          const done = (b.tubesPending || 0) === 0;
+          return (
+            <div
+              key={b.id}
+              style={{
+                background: "#1a2e1a",
+                border: `1px solid ${done ? "#4ade80" : "#2d4a2d"}`,
+                borderRadius: 14,
+                padding: 16,
+                marginBottom: 10,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  marginBottom: 10,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: "50%",
+                      background: done ? "#1a3d1a" : "#2d4a2d",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 17,
+                      fontWeight: "bold",
+                      color: done ? "#4ade80" : "#9ab89a",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {b.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <div
+                      style={{
+                        fontSize: 15,
+                        fontWeight: "bold",
+                        color: "#c8e6c9",
+                      }}
+                    >
+                      {b.name}
+                    </div>
+                    <div style={{ fontSize: 12, color: "#6a9c6a" }}>
+                      📍 {b.location}
+                    </div>
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    padding: "3px 10px",
+                    borderRadius: 20,
+                    background: done ? "#1a3d1a" : "#2a2000",
+                    color: done ? "#4ade80" : "#fbbf24",
+                    border: `1px solid ${done ? "#4ade80" : "#f59e0b"}`,
+                  }}
+                >
+                  {done ? "✓ Complete" : "⏳ Partial"}
+                </span>
+              </div>
+              {/* Progress bar */}
+              <div style={{ marginBottom: 10 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    fontSize: 12,
+                    color: "#6a9c6a",
+                    marginBottom: 4,
+                  }}
+                >
+                  <span>
+                    {(b.tubesDelivered || 0).toLocaleString()} delivered
+                  </span>
+                  <span>
+                    {(b.tubesPending || 0).toLocaleString()} remaining
+                  </span>
+                  <span style={{ color: "#c8e6c9" }}>{pct}%</span>
+                </div>
+                <div
+                  style={{ background: "#2d4a2d", borderRadius: 4, height: 7 }}
+                >
+                  <div
+                    style={{
+                      background: done ? "#4ade80" : "#fbbf24",
+                      height: "100%",
+                      borderRadius: 4,
+                      width: `${pct}%`,
+                      transition: "width 0.3s",
+                    }}
+                  />
+                </div>
+              </div>
+              {/* Delivery history */}
+              {b.deliveries.map((d, i) => (
+                <div
+                  key={i}
+                  style={{
+                    fontSize: 12,
+                    color: "#9ab89a",
+                    padding: "5px 0",
+                    borderTop: "1px solid #2d4a2d",
+                    display: "flex",
+                    justifyContent: "space-between",
+                  }}
+                >
+                  <span>
+                    📦 {d.tubesDelivered.toLocaleString()} tubes
+                    {d.note ? ` — ${d.note}` : ""}
+                  </span>
+                  <span style={{ color: "#4a7c59" }}>
+                    {formatDate(
+                      new Date(d.deliveredAt).toISOString().split("T")[0]
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
+          );
+        })
+      ) : (
+        // Desktop table
+        <div
+          style={{
+            background: "#1a2e1a",
+            border: "1px solid #2d4a2d",
+            borderRadius: 12,
+            overflow: "hidden",
+          }}
+        >
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr>
+                {[
+                  "Farmer",
+                  "Location",
+                  "Booked",
+                  "Delivered",
+                  "Remaining",
+                  "Progress",
+                  "Deliveries",
+                ].map((h) => (
+                  <th key={h} style={thStyle}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((b, i) => {
+                const pct = Math.round(
+                  ((b.tubesDelivered || 0) / b.tubes) * 100
+                );
+                const done = (b.tubesPending || 0) === 0;
+                return (
+                  <tr key={b.id}>
+                    <td style={{ ...tdStyle(i), fontWeight: "bold" }}>
+                      {b.name}
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "#6a9c6a",
+                          fontWeight: "normal",
+                          marginTop: 2,
+                        }}
+                      >
+                        📞 {b.phone}
+                      </div>
+                    </td>
+                    <td style={tdStyle(i)}>{b.location}</td>
+                    <td style={{ ...tdStyle(i), textAlign: "right" }}>
+                      {b.tubes.toLocaleString()}
+                    </td>
+                    <td
+                      style={{
+                        ...tdStyle(i),
+                        textAlign: "right",
+                        color: "#4ade80",
+                        fontWeight: "bold",
+                      }}
+                    >
+                      {(b.tubesDelivered || 0).toLocaleString()}
+                    </td>
+                    <td
+                      style={{
+                        ...tdStyle(i),
+                        textAlign: "right",
+                        color: done ? "#4ade80" : "#fbbf24",
+                      }}
+                    >
+                      {(b.tubesPending || 0).toLocaleString()}
+                    </td>
+                    <td style={tdStyle(i)}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                        }}
+                      >
+                        <div
+                          style={{
+                            flex: 1,
+                            background: "#2d4a2d",
+                            borderRadius: 4,
+                            height: 8,
+                          }}
+                        >
+                          <div
+                            style={{
+                              background: done ? "#4ade80" : "#fbbf24",
+                              height: "100%",
+                              borderRadius: 4,
+                              width: `${pct}%`,
+                            }}
+                          />
+                        </div>
+                        <span
+                          style={{
+                            fontSize: 12,
+                            color: done ? "#4ade80" : "#fbbf24",
+                            minWidth: 32,
+                          }}
+                        >
+                          {pct}%
+                        </span>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          padding: "2px 8px",
+                          borderRadius: 20,
+                          background: done ? "#1a3d1a" : "#2a2000",
+                          color: done ? "#4ade80" : "#fbbf24",
+                          border: `1px solid ${done ? "#4ade80" : "#f59e0b"}`,
+                          marginTop: 4,
+                          display: "inline-block",
+                        }}
+                      >
+                        {done ? "✓ Complete" : "⏳ Partial"}
+                      </span>
+                    </td>
+                    <td style={tdStyle(i)}>
+                      {b.deliveries.map((d, j) => (
+                        <div
+                          key={j}
+                          style={{
+                            fontSize: 12,
+                            color: "#9ab89a",
+                            padding: "2px 0",
+                            display: "flex",
+                            gap: 6,
+                          }}
+                        >
+                          <span
+                            style={{ color: "#4ade80", fontWeight: "bold" }}
+                          >
+                            {d.tubesDelivered.toLocaleString()}
+                          </span>
+                          <span>
+                            on{" "}
+                            {formatDate(
+                              new Date(d.deliveredAt)
+                                .toISOString()
+                                .split("T")[0]
+                            )}
+                          </span>
+                          {d.note && (
+                            <span style={{ color: "#4a7c59" }}>— {d.note}</span>
+                          )}
+                        </div>
+                      ))}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Report View ────────────────────────────────────────────────
 function ReportView({ bookings, downloading, onDownload, isMobile }) {
@@ -1319,6 +2175,7 @@ export default function BookingApp() {
   const [waBooking, setWaBooking] = useState(null);
   const [search, setSearch] = useState("");
   const [downloading, setDownloading] = useState(false);
+  const [deliveryBooking, setDeliveryBooking] = useState(null);
 
   const handleDownloadReport = async () => {
     setDownloading(true);
@@ -1359,6 +2216,22 @@ export default function BookingApp() {
       }
     })();
   }, []);
+
+  const handleDelivery = async (bookingId, tubesDelivered, note) => {
+    try {
+      const { data } = await apiRecordDelivery(bookingId, tubesDelivered, note);
+      setBookings((prev) => prev.map((b) => (b.id === bookingId ? data : b)));
+      setDeliveryBooking(null);
+      const pending = data.tubesPending;
+      showToast(
+        pending === 0
+          ? `All ${data.tubes} tubes delivered!`
+          : `${tubesDelivered} tubes delivered. ${pending} remaining.`
+      );
+    } catch (err) {
+      showToast(err.message || "Delivery failed.", "error");
+    }
+  };
 
   const goTo = (v) => {
     setView(v);
@@ -1421,17 +2294,25 @@ export default function BookingApp() {
   const upcoming = bookings.filter(
     (b) => getDeliveryDate(b.bookingDate) >= today
   ).length;
-  const filtered = bookings.filter(
+  // Exclude fully delivered bookings from the bookings list
+  const pendingBookings = bookings.filter(
+    (b) => (b.tubesPending ?? b.tubes) > 0
+  );
+  const filtered = pendingBookings.filter(
     (b) =>
       b.name.toLowerCase().includes(search.toLowerCase()) ||
       b.location.toLowerCase().includes(search.toLowerCase()) ||
       b.phone.includes(search)
   );
 
+  const fullyDelivered = bookings.filter(
+    (b) => (b.tubesPending ?? b.tubes) === 0 && (b.tubesDelivered || 0) > 0
+  ).length;
+
   const kpis = [
     {
-      label: "Total Bookings",
-      value: bookings.length,
+      label: "Pending Bookings",
+      value: pendingBookings.length,
       icon: "📋",
       accent: "#4a7c59",
     },
@@ -1448,10 +2329,10 @@ export default function BookingApp() {
       accent: "#1b4332",
     },
     {
-      label: "Upcoming Deliveries",
-      value: upcoming,
-      icon: "📦",
-      accent: "#3d5a3e",
+      label: "Fully Delivered",
+      value: fullyDelivered,
+      icon: "✅",
+      accent: "#1a3d1a",
     },
   ];
 
@@ -1470,6 +2351,14 @@ export default function BookingApp() {
           isMobile={isMobile}
           booking={waBooking}
           onClose={() => setWaBooking(null)}
+        />
+      )}
+      {deliveryBooking && (
+        <DeliveryModal
+          isMobile={isMobile}
+          booking={deliveryBooking}
+          onConfirm={(n, note) => handleDelivery(deliveryBooking.id, n, note)}
+          onCancel={() => setDeliveryBooking(null)}
         />
       )}
     </>
@@ -1726,7 +2615,11 @@ export default function BookingApp() {
                   }}
                 >
                   <div style={{ fontSize: 40, marginBottom: 12 }}>🌱</div>
-                  <div>{search ? "No results found." : "No bookings yet."}</div>
+                  <div>
+                    {search
+                      ? "No results found."
+                      : "All bookings delivered! 🎉"}
+                  </div>
                 </div>
               ) : (
                 [...filtered].map((b) => (
@@ -1736,6 +2629,7 @@ export default function BookingApp() {
                     onEdit={handleEdit}
                     onDelete={(id) => setDeleteId(id)}
                     onWhatsApp={setWaBooking}
+                    onDeliver={setDeliveryBooking}
                   />
                 ))
               )}
@@ -1754,6 +2648,9 @@ export default function BookingApp() {
                 goTo("bookings");
               }}
             />
+          )}
+          {mv === "delivered" && (
+            <DeliveredView bookings={bookings} isMobile={true} />
           )}
           {mv === "report" && (
             <ReportView
@@ -1781,6 +2678,7 @@ export default function BookingApp() {
           {[
             ["dashboard", "📊", "Dashboard"],
             ["bookings", "📋", "Bookings"],
+            ["delivered", "🚚", "Delivered"],
             ["form", "➕", "Add"],
             ["report", "📄", "Report"],
           ].map(([v, icon, label]) => (
@@ -1880,6 +2778,7 @@ export default function BookingApp() {
             {[
               ["dashboard", "📊 Dashboard"],
               ["bookings", "📋 Bookings"],
+              ["delivered", "🚚 Delivered"],
               ["add", "➕ New Booking"],
               ["report", "📄 Report"],
             ].map(([v, label]) => (
@@ -2147,8 +3046,8 @@ export default function BookingApp() {
                   All Bookings
                 </h1>
                 <p style={{ color: "#6a9c6a", marginTop: 4, fontSize: 14 }}>
-                  {bookings.length} booking{bookings.length !== 1 ? "s" : ""}{" "}
-                  registered
+                  {filtered.length} pending booking
+                  {filtered.length !== 1 ? "s" : ""}
                 </p>
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -2223,7 +3122,7 @@ export default function BookingApp() {
                 <div style={{ fontSize: 18 }}>
                   {search
                     ? "No bookings match your search."
-                    : "No bookings yet."}
+                    : "All bookings have been fully delivered! 🎉"}
                 </div>
               </div>
             ) : (
@@ -2234,9 +3133,30 @@ export default function BookingApp() {
                   onEdit={handleEdit}
                   onDelete={(id) => setDeleteId(id)}
                   onWhatsApp={setWaBooking}
+                  onDeliver={setDeliveryBooking}
                 />
               ))
             )}
+          </div>
+        )}
+        {dv === "delivered" && (
+          <div>
+            <div style={{ marginBottom: 24 }}>
+              <h1
+                style={{
+                  fontSize: 24,
+                  fontWeight: "bold",
+                  color: "#c8e6c9",
+                  margin: 0,
+                }}
+              >
+                Delivered
+              </h1>
+              <p style={{ color: "#6a9c6a", marginTop: 4, fontSize: 14 }}>
+                Track tube delivery progress per farmer
+              </p>
+            </div>
+            <DeliveredView bookings={bookings} isMobile={false} />
           </div>
         )}
         {dv === "report" && (
