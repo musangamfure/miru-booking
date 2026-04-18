@@ -2560,6 +2560,192 @@ function ReportView({ bookings, downloading, onDownload, isMobile }) {
   );
 }
 
+// ── Reminder helpers ───────────────────────────────────────────
+function daysUntilDelivery(bookingDate) {
+  const delivery = new Date(bookingDate);
+  delivery.setDate(delivery.getDate() + 30);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  delivery.setHours(0, 0, 0, 0);
+  return Math.ceil((delivery - today) / (1000 * 60 * 60 * 24));
+}
+
+function buildReminderMessage(b) {
+  const days = daysUntilDelivery(b.bookingDate);
+  const delivery = formatDate(getDeliveryDate(b.bookingDate));
+  const sacks = Math.ceil(b.tubes / 60);
+  const loadingCost = (sacks * 350).toLocaleString();
+  return (
+    "Dear " +
+    b.name +
+    ",\n\n" +
+    "Your mushroom tubes delivery is in " +
+    days +
+    " day" +
+    (days !== 1 ? "s" : "") +
+    " — on " +
+    delivery +
+    ".\n\n" +
+    "Please prepare the following before delivery:\n\n" +
+    "1. Transportation cost (varies by location — our team will confirm your exact amount).\n\n" +
+    "2. Amafaranga y'abakarani (Loading manpower): RWF " +
+    loadingCost +
+    "\n" +
+    "   (" +
+    b.tubes +
+    " tubes = " +
+    sacks +
+    " sack" +
+    (sacks > 1 ? "s" : "") +
+    " x 350 RWF per sack)\n\n" +
+    "3. Black plastic / Ishashi y'umukarera\n" +
+    "   (1 roll per " +
+    Math.ceil(b.tubes / 100) +
+    " rows of tubes)\n\n" +
+    "4. Razors / Inzembe zo gukata amashashi y'imigina\n" +
+    "   (At least 2 razors recommended)\n\n" +
+    "5. Umuti wa Dudu wo kurwanya udukoko\n" +
+    "   (Insect repellent spray for your mushroom house)\n\n" +
+    "6. Abakozi bo gufasha umukozi wa Miru Mushrooms mu gutera imigina\n" +
+    "   (Workers to assist with planting — please arrange in advance)\n\n" +
+    "If you have any questions, please contact us.\n\n" +
+    "Thank you — Miru Mushrooms Team"
+  );
+}
+
+function buildReminderLink(b) {
+  const phone = b.phone.replace(/\D/g, "");
+  return (
+    "https://wa.me/" +
+    phone +
+    "?text=" +
+    encodeURIComponent(buildReminderMessage(b))
+  );
+}
+
+// ── Reminder Alert Card ────────────────────────────────────────
+function ReminderCard({ bookings, isMobile }) {
+  const due = bookings
+    .filter((b) => (b.tubesPending ?? b.tubes) > 0)
+    .map((b) => ({ ...b, daysLeft: daysUntilDelivery(b.bookingDate) }))
+    .filter((b) => b.daysLeft >= 0 && b.daysLeft <= 5)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
+  if (due.length === 0) return null;
+  return (
+    <div
+      style={{
+        background: "#1a1400",
+        border: "2px solid #f59e0b",
+        borderRadius: 14,
+        padding: isMobile ? 16 : 20,
+        marginBottom: 24,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: 14,
+        }}
+      >
+        <span style={{ fontSize: 22 }}>🔔</span>
+        <div>
+          <div
+            style={{
+              fontSize: isMobile ? 14 : 16,
+              fontWeight: "bold",
+              color: "#fbbf24",
+            }}
+          >
+            {due.length} farmer{due.length > 1 ? "s" : ""} due for delivery
+            within 5 days
+          </div>
+          <div style={{ fontSize: 12, color: "#92651a", marginTop: 2 }}>
+            Send them a preparation reminder on WhatsApp
+          </div>
+        </div>
+      </div>
+      {due.map((b, i) => (
+        <div
+          key={b.id}
+          style={{
+            background: "#0f0e00",
+            border: "1px solid #78460a",
+            borderRadius: 10,
+            padding: isMobile ? "12px 14px" : "14px 18px",
+            marginBottom: i < due.length - 1 ? 10 : 0,
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            flexWrap: "wrap",
+            gap: 10,
+          }}
+        >
+          <div>
+            <div
+              style={{
+                fontWeight: "bold",
+                color: "#e8dcc8",
+                fontSize: isMobile ? 14 : 15,
+              }}
+            >
+              {b.name}
+            </div>
+            <div style={{ fontSize: 12, color: "#92651a", marginTop: 3 }}>
+              📍 {b.location} · 📦 {formatDate(getDeliveryDate(b.bookingDate))}{" "}
+              ·{" "}
+              <span
+                style={{
+                  color:
+                    b.daysLeft === 0
+                      ? "#ef4444"
+                      : b.daysLeft === 1
+                      ? "#f97316"
+                      : "#fbbf24",
+                  fontWeight: "bold",
+                }}
+              >
+                {b.daysLeft === 0
+                  ? "Today!"
+                  : b.daysLeft === 1
+                  ? "Tomorrow!"
+                  : b.daysLeft + " days"}
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: "#6a9c6a", marginTop: 2 }}>
+              {(b.tubesPending ?? b.tubes).toLocaleString()} tubes pending
+            </div>
+          </div>
+          <a
+            href={buildReminderLink(b)}
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: isMobile ? "10px 14px" : "10px 18px",
+              borderRadius: 10,
+              background: "#25D366",
+              color: "white",
+              fontWeight: "bold",
+              fontSize: isMobile ? 13 : 14,
+              textDecoration: "none",
+              fontFamily: "Georgia, serif",
+              whiteSpace: "nowrap",
+            }}
+          >
+            💬 Send Reminder
+          </a>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+
 export default function BookingApp() {
   const isMobile = useIsMobile();
   const [bookings, setBookings] = useState([]);
