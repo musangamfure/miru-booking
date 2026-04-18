@@ -2259,7 +2259,7 @@ function ReminderCard({ bookings, isMobile }) {
             }}
           >
             {due.length} farmer{due.length > 1 ? "s" : ""} due for delivery
-            within 3 days
+            within 5 days
           </div>
           <div style={{ fontSize: 12, color: "#92651a", marginTop: 2 }}>
             Send them a preparation reminder on WhatsApp
@@ -2491,8 +2491,8 @@ export default function BookingApp() {
 
   const kpis = [
     {
-      label: "Total Bookings",
-      value: bookings.length,
+      label: "Pending Bookings",
+      value: pendingBookings.length,
       icon: "📋",
       accent: "#4a7c59",
     },
@@ -2509,10 +2509,10 @@ export default function BookingApp() {
       accent: "#1b4332",
     },
     {
-      label: "Upcoming Deliveries",
-      value: upcoming,
-      icon: "📦",
-      accent: "#3d5a3e",
+      label: "Fully Delivered",
+      value: fullyDelivered,
+      icon: "✅",
+      accent: "#1a3d1a",
     },
   ];
 
