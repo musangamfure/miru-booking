@@ -2628,7 +2628,7 @@ function ReminderCard({ bookings, isMobile }) {
   const due = bookings
     .filter((b) => (b.tubesPending ?? b.tubes) > 0)
     .map((b) => ({ ...b, daysLeft: daysUntilDelivery(b.bookingDate) }))
-    .filter((b) => b.daysLeft >= 0 && b.daysLeft <= 5)
+    .filter((b) => b.daysLeft >= 0 && b.daysLeft <= 20)
     .sort((a, b) => a.daysLeft - b.daysLeft);
   if (due.length === 0) return null;
   return (
