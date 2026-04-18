@@ -2491,8 +2491,8 @@ export default function BookingApp() {
 
   const kpis = [
     {
-      label: "Pending Bookings",
-      value: pendingBookings.length,
+      label: "Total Bookings",
+      value: bookings.length,
       icon: "📋",
       accent: "#4a7c59",
     },
@@ -2509,10 +2509,10 @@ export default function BookingApp() {
       accent: "#1b4332",
     },
     {
-      label: "Fully Delivered",
-      value: fullyDelivered,
-      icon: "✅",
-      accent: "#1a3d1a",
+      label: "Upcoming Deliveries",
+      value: upcoming,
+      icon: "📦",
+      accent: "#3d5a3e",
     },
   ];
 
