@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   EMPTY_FORM,
   formatDate,
@@ -996,8 +996,6 @@ function DesktopBookingRow({ b, onEdit, onDelete, onWhatsApp, onDeliver }) {
     </div>
   );
 }
-
-// ── Main App ───────────────────────────────────────────────────
 
 // ── Delivery Modal ─────────────────────────────────────────────
 function DeliveryModal({ booking, onConfirm, onCancel, isMobile }) {
@@ -2158,404 +2156,190 @@ function ReportView({ bookings, downloading, onDownload, isMobile }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
 
-      {/* ── Delivery Report Section ── */}
-      {bookings.some((b) => (b.deliveries || []).length > 0) && (
+// ── Reminder helpers ───────────────────────────────────────────
+function daysUntilDelivery(bookingDate) {
+  const delivery = new Date(bookingDate);
+  delivery.setDate(delivery.getDate() + 30);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  delivery.setHours(0, 0, 0, 0);
+  return Math.ceil((delivery - today) / (1000 * 60 * 60 * 24));
+}
+
+function buildReminderMessage(b) {
+  const days = daysUntilDelivery(b.bookingDate);
+  const delivery = formatDate(getDeliveryDate(b.bookingDate));
+  const sacks = Math.ceil(b.tubes / 60);
+  const loadingCost = (sacks * 350).toLocaleString();
+  return (
+    "Dear " +
+    b.name +
+    ",\n\n" +
+    "Your mushroom tubes delivery is in " +
+    days +
+    " day" +
+    (days !== 1 ? "s" : "") +
+    " — on " +
+    delivery +
+    ".\n\n" +
+    "Please prepare the following before delivery:\n\n" +
+    "1. Transportation cost (varies by location — our team will confirm your exact amount).\n\n" +
+    "2. Amafaranga y'abakarani (Loading manpower): RWF " +
+    loadingCost +
+    "\n" +
+    "   (" +
+    b.tubes +
+    " tubes = " +
+    sacks +
+    " sack" +
+    (sacks > 1 ? "s" : "") +
+    " x 350 RWF per sack)\n\n" +
+    "3. Black plastic / Ishashi y'umukarera\n" +
+    "   (1 roll per " +
+    Math.ceil(b.tubes / 100) +
+    " rows of tubes)\n\n" +
+    "4. Razors / Inzembe zo gukata amashashi y'imigina\n" +
+    "   (At least 2 razors recommended)\n\n" +
+    "5. Umuti wa Dudu wo kurwanya udukoko\n" +
+    "   (Insect repellent spray for your mushroom house)\n\n" +
+    "6. Abakozi bo gufasha umukozi wa Miru Mushrooms mu gutera imigina\n" +
+    "   (Workers to assist with planting — please arrange in advance)\n\n" +
+    "If you have any questions, please contact us.\n\n" +
+    "Thank you — Miru Mushrooms Team"
+  );
+}
+
+function buildReminderLink(b) {
+  const phone = b.phone.replace(/\D/g, "");
+  return (
+    "https://wa.me/" +
+    phone +
+    "?text=" +
+    encodeURIComponent(buildReminderMessage(b))
+  );
+}
+
+// ── Reminder Alert Card ────────────────────────────────────────
+function ReminderCard({ bookings, isMobile }) {
+  const due = bookings
+    .filter((b) => (b.tubesPending ?? b.tubes) > 0)
+    .map((b) => ({ ...b, daysLeft: daysUntilDelivery(b.bookingDate) }))
+    .filter((b) => b.daysLeft >= 0 && b.daysLeft <= 5)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
+  if (due.length === 0) return null;
+  return (
+    <div
+      style={{
+        background: "#1a1400",
+        border: "2px solid #f59e0b",
+        borderRadius: 14,
+        padding: isMobile ? 16 : 20,
+        marginBottom: 24,
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: 14,
+        }}
+      >
+        <span style={{ fontSize: 22 }}>🔔</span>
+        <div>
+          <div
+            style={{
+              fontSize: isMobile ? 14 : 16,
+              fontWeight: "bold",
+              color: "#fbbf24",
+            }}
+          >
+            {due.length} farmer{due.length > 1 ? "s" : ""} due for delivery
+            within 3 days
+          </div>
+          <div style={{ fontSize: 12, color: "#92651a", marginTop: 2 }}>
+            Send them a preparation reminder on WhatsApp
+          </div>
+        </div>
+      </div>
+      {due.map((b, i) => (
         <div
+          key={b.id}
           style={{
+            background: "#0f0e00",
+            border: "1px solid #78460a",
+            borderRadius: 10,
+            padding: isMobile ? "12px 14px" : "14px 18px",
+            marginBottom: i < due.length - 1 ? 10 : 0,
             display: "flex",
+            justifyContent: "space-between",
             alignItems: "center",
-            gap: 12,
-            marginTop: 8,
-            marginBottom: 4,
+            flexWrap: "wrap",
+            gap: 10,
           }}
         >
-          <div style={{ flex: 1, height: 1, background: "#2d4a2d" }} />
-          <h2
+          <div>
+            <div
+              style={{
+                fontWeight: "bold",
+                color: "#e8dcc8",
+                fontSize: isMobile ? 14 : 15,
+              }}
+            >
+              {b.name}
+            </div>
+            <div style={{ fontSize: 12, color: "#92651a", marginTop: 3 }}>
+              📍 {b.location} · 📦 {formatDate(getDeliveryDate(b.bookingDate))}{" "}
+              ·{" "}
+              <span
+                style={{
+                  color:
+                    b.daysLeft === 0
+                      ? "#ef4444"
+                      : b.daysLeft === 1
+                      ? "#f97316"
+                      : "#fbbf24",
+                  fontWeight: "bold",
+                }}
+              >
+                {b.daysLeft === 0
+                  ? "Today!"
+                  : b.daysLeft === 1
+                  ? "Tomorrow!"
+                  : b.daysLeft + " days"}
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: "#6a9c6a", marginTop: 2 }}>
+              {(b.tubesPending ?? b.tubes).toLocaleString()} tubes pending
+            </div>
+          </div>
+          <a
+            href={buildReminderLink(b)}
+            target="_blank"
+            rel="noreferrer"
             style={{
-              margin: 0,
-              fontSize: 16,
-              color: "#c8e6c9",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              padding: isMobile ? "10px 14px" : "10px 18px",
+              borderRadius: 10,
+              background: "#25D366",
+              color: "white",
+              fontWeight: "bold",
+              fontSize: isMobile ? 13 : 14,
+              textDecoration: "none",
+              fontFamily: "Georgia, serif",
               whiteSpace: "nowrap",
             }}
           >
-            🚚 Delivery Report
-          </h2>
-          <div style={{ flex: 1, height: 1, background: "#2d4a2d" }} />
+            💬 Send Reminder
+          </a>
         </div>
-      )}
-      {(() => {
-        const withDeliveries = bookings.filter(
-          (b) => (b.deliveries || []).length > 0
-        );
-        if (withDeliveries.length === 0) return null;
-
-        const totalDelivered = withDeliveries.reduce(
-          (s, b) => s + (b.tubesDelivered || 0),
-          0
-        );
-        const totalBooked = bookings.reduce((s, b) => s + b.tubes, 0);
-        const fullyDone = withDeliveries.filter(
-          (b) => (b.tubesPending || 0) === 0
-        ).length;
-        const partialCount = withDeliveries.length - fullyDone;
-        const pctOverall = totalBooked
-          ? Math.round((totalDelivered / totalBooked) * 100)
-          : 0;
-
-        return (
-          <>
-            {/* Delivery KPI strip */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4,1fr)",
-                gap: 12,
-                marginBottom: 20,
-                marginTop: 8,
-              }}
-            >
-              {[
-                {
-                  label: "Tubes Delivered",
-                  value: totalDelivered.toLocaleString(),
-                  accent: "#4a7c59",
-                },
-                {
-                  label: "Tubes Pending",
-                  value: (totalBooked - totalDelivered).toLocaleString(),
-                  accent: "#f59e0b",
-                },
-                {
-                  label: "Fully Delivered",
-                  value: fullyDone,
-                  accent: "#1b4332",
-                },
-                { label: "Partial", value: partialCount, accent: "#2d6a4f" },
-              ].map((k) => (
-                <div
-                  key={k.label}
-                  style={{
-                    background: "#1a2e1a",
-                    border: `1px solid ${k.accent}`,
-                    borderRadius: 12,
-                    padding: "12px 16px",
-                    borderLeft: `4px solid ${k.accent}`,
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: isMobile ? 18 : 22,
-                      fontWeight: "bold",
-                      color: "#c8e6c9",
-                    }}
-                  >
-                    {k.value}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: 11,
-                      color: "#6a9c6a",
-                      marginTop: 3,
-                      textTransform: "uppercase",
-                      letterSpacing: 0.8,
-                    }}
-                  >
-                    {k.label}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Overall progress bar */}
-            <div
-              style={{
-                background: "#1a2e1a",
-                border: "1px solid #2d4a2d",
-                borderRadius: 12,
-                padding: 20,
-                marginBottom: 20,
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  marginBottom: 10,
-                }}
-              >
-                <h2 style={{ margin: 0, fontSize: 15, color: "#c8e6c9" }}>
-                  Overall Delivery Progress
-                </h2>
-                <span
-                  style={{
-                    fontSize: 14,
-                    fontWeight: "bold",
-                    color: pctOverall === 100 ? "#4ade80" : "#fbbf24",
-                  }}
-                >
-                  {pctOverall}%
-                </span>
-              </div>
-              <div
-                style={{
-                  background: "#2d4a2d",
-                  borderRadius: 6,
-                  height: 14,
-                  overflow: "hidden",
-                }}
-              >
-                <div
-                  style={{
-                    background: pctOverall === 100 ? "#4ade80" : "#fbbf24",
-                    height: "100%",
-                    borderRadius: 6,
-                    width: `${pctOverall}%`,
-                    transition: "width 0.4s",
-                  }}
-                />
-              </div>
-              <div
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: 12,
-                  color: "#6a9c6a",
-                  marginTop: 6,
-                }}
-              >
-                <span>{totalDelivered.toLocaleString()} tubes delivered</span>
-                <span>
-                  {(totalBooked - totalDelivered).toLocaleString()} tubes
-                  remaining
-                </span>
-              </div>
-            </div>
-
-            {/* Per-farmer delivery table */}
-            <div
-              style={{
-                background: "#1a2e1a",
-                border: "1px solid #2d4a2d",
-                borderRadius: 12,
-                padding: 20,
-                marginBottom: 20,
-              }}
-            >
-              <h2
-                style={{ margin: "0 0 14px", fontSize: 15, color: "#c8e6c9" }}
-              >
-                Delivery Progress per Farmer
-              </h2>
-              <div style={{ overflowX: "auto" }}>
-                <table
-                  style={{
-                    width: "100%",
-                    borderCollapse: "collapse",
-                    minWidth: 480,
-                  }}
-                >
-                  <thead>
-                    <tr>
-                      {[
-                        "Farmer",
-                        "Location",
-                        "Booked",
-                        "Delivered",
-                        "Remaining",
-                        "Progress",
-                      ].map((h) => (
-                        <th key={h} style={thStyle}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {withDeliveries
-                      .sort(
-                        (a, b) =>
-                          (b.tubesDelivered || 0) - (a.tubesDelivered || 0)
-                      )
-                      .map((b, i) => {
-                        const pct = b.tubes
-                          ? Math.round(
-                              ((b.tubesDelivered || 0) / b.tubes) * 100
-                            )
-                          : 0;
-                        const done = (b.tubesPending || 0) === 0;
-                        return (
-                          <tr key={b.id}>
-                            <td style={{ ...tdStyle(i), fontWeight: "bold" }}>
-                              {b.name}
-                              <div
-                                style={{
-                                  fontSize: 11,
-                                  color: "#6a9c6a",
-                                  fontWeight: "normal",
-                                }}
-                              >
-                                📍 {b.location}
-                              </div>
-                            </td>
-                            <td style={tdStyle(i)}>{b.location}</td>
-                            <td style={tdNum(i)}>{b.tubes.toLocaleString()}</td>
-                            <td style={{ ...tdNum(i), color: "#4ade80" }}>
-                              {(b.tubesDelivered || 0).toLocaleString()}
-                            </td>
-                            <td
-                              style={{
-                                ...tdNum(i),
-                                color: done ? "#4ade80" : "#fbbf24",
-                              }}
-                            >
-                              {(b.tubesPending || 0).toLocaleString()}
-                            </td>
-                            <td style={tdStyle(i)}>
-                              <div
-                                style={{
-                                  display: "flex",
-                                  alignItems: "center",
-                                  gap: 8,
-                                }}
-                              >
-                                <div
-                                  style={{
-                                    flex: 1,
-                                    background: "#2d4a2d",
-                                    borderRadius: 3,
-                                    height: 7,
-                                  }}
-                                >
-                                  <div
-                                    style={{
-                                      background: done ? "#4ade80" : "#fbbf24",
-                                      height: "100%",
-                                      borderRadius: 3,
-                                      width: `${pct}%`,
-                                    }}
-                                  />
-                                </div>
-                                <span
-                                  style={{
-                                    fontSize: 12,
-                                    color: done ? "#4ade80" : "#fbbf24",
-                                    minWidth: 34,
-                                  }}
-                                >
-                                  {pct}%
-                                </span>
-                                {done && (
-                                  <span
-                                    style={{
-                                      fontSize: 10,
-                                      padding: "2px 7px",
-                                      borderRadius: 20,
-                                      background: "#1a3d1a",
-                                      color: "#4ade80",
-                                      border: "1px solid #4ade80",
-                                    }}
-                                  >
-                                    ✓
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Delivery log */}
-            <div
-              style={{
-                background: "#1a2e1a",
-                border: "1px solid #2d4a2d",
-                borderRadius: 12,
-                padding: 20,
-                marginBottom: 20,
-              }}
-            >
-              <h2
-                style={{ margin: "0 0 14px", fontSize: 15, color: "#c8e6c9" }}
-              >
-                Full Delivery Log
-              </h2>
-              <div style={{ overflowX: "auto" }}>
-                <table
-                  style={{
-                    width: "100%",
-                    borderCollapse: "collapse",
-                    minWidth: 480,
-                  }}
-                >
-                  <thead>
-                    <tr>
-                      {[
-                        "Farmer",
-                        "Location",
-                        "Tubes",
-                        "Date Delivered",
-                        "Note",
-                      ].map((h) => (
-                        <th key={h} style={thStyle}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {withDeliveries
-                      .flatMap((b) =>
-                        (b.deliveries || []).map((d, j) => ({
-                          ...d,
-                          farmerName: b.name,
-                          location: b.location,
-                          bookingId: b.id + j,
-                        }))
-                      )
-                      .sort(
-                        (a, b) =>
-                          new Date(b.deliveredAt) - new Date(a.deliveredAt)
-                      )
-                      .map((d, i) => (
-                        <tr key={d.bookingId + i}>
-                          <td style={{ ...tdStyle(i), fontWeight: "bold" }}>
-                            {d.farmerName}
-                          </td>
-                          <td style={tdStyle(i)}>{d.location}</td>
-                          <td style={tdNum(i)}>
-                            {d.tubesDelivered.toLocaleString()}
-                          </td>
-                          <td style={{ ...tdStyle(i), color: "#4ade80" }}>
-                            {formatDate(
-                              new Date(d.deliveredAt)
-                                .toISOString()
-                                .split("T")[0]
-                            )}
-                          </td>
-                          <td
-                            style={{
-                              ...tdStyle(i),
-                              color: "#6a9c6a",
-                              fontStyle: d.note ? "normal" : "italic",
-                            }}
-                          >
-                            {d.note || "—"}
-                          </td>
-                        </tr>
-                      ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </>
-        );
-      })()}
+      ))}
     </div>
   );
 }
@@ -2692,20 +2476,18 @@ export default function BookingApp() {
   const upcoming = bookings.filter(
     (b) => getDeliveryDate(b.bookingDate) >= today
   ).length;
-  // Exclude fully delivered bookings from the bookings list
   const pendingBookings = bookings.filter(
     (b) => (b.tubesPending ?? b.tubes) > 0
   );
+  const fullyDelivered = bookings.filter(
+    (b) => (b.tubesPending ?? b.tubes) === 0 && (b.tubesDelivered || 0) > 0
+  ).length;
   const filtered = pendingBookings.filter(
     (b) =>
       b.name.toLowerCase().includes(search.toLowerCase()) ||
       b.location.toLowerCase().includes(search.toLowerCase()) ||
       b.phone.includes(search)
   );
-
-  const fullyDelivered = bookings.filter(
-    (b) => (b.tubesPending ?? b.tubes) === 0 && (b.tubesDelivered || 0) > 0
-  ).length;
 
   const kpis = [
     {
@@ -2869,6 +2651,7 @@ export default function BookingApp() {
                   </div>
                 ))}
               </div>
+              <ReminderCard bookings={bookings} isMobile={true} />
               <div
                 style={{
                   background: "#1a2e1a",
@@ -3013,11 +2796,7 @@ export default function BookingApp() {
                   }}
                 >
                   <div style={{ fontSize: 40, marginBottom: 12 }}>🌱</div>
-                  <div>
-                    {search
-                      ? "No results found."
-                      : "All bookings delivered! 🎉"}
-                  </div>
+                  <div>{search ? "No results found." : "No bookings yet."}</div>
                 </div>
               ) : (
                 [...filtered].map((b) => (
@@ -3264,6 +3043,7 @@ export default function BookingApp() {
                 </div>
               ))}
             </div>
+            <ReminderCard bookings={bookings} isMobile={false} />
             <div
               style={{
                 background: "#1a2e1a",
@@ -3444,8 +3224,8 @@ export default function BookingApp() {
                   All Bookings
                 </h1>
                 <p style={{ color: "#6a9c6a", marginTop: 4, fontSize: 14 }}>
-                  {filtered.length} pending booking
-                  {filtered.length !== 1 ? "s" : ""}
+                  {bookings.length} booking{bookings.length !== 1 ? "s" : ""}{" "}
+                  registered
                 </p>
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -3520,7 +3300,7 @@ export default function BookingApp() {
                 <div style={{ fontSize: 18 }}>
                   {search
                     ? "No bookings match your search."
-                    : "All bookings have been fully delivered! 🎉"}
+                    : "No bookings yet."}
                 </div>
               </div>
             ) : (
