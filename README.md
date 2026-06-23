@@ -25,8 +25,8 @@ A full-stack web application for managing mushroom tube bookings, built with **N
 ### Booking Management
 
 - Add, edit, and delete farmer bookings
-- Fields: Farmer Name, Telephone, Tubes Booked, Booking Date, Farm Location
-- Amount due and delivery date (booking date + 30 days) are calculated automatically
+- Fields: Farmer Name, Telephone, Tubes Booked, Booking Date, Inoculation Date (Imigina yatewe umurama), Farm Location
+- Amount due and delivery date are calculated automatically — delivery is due **30 days after the inoculation date** (falls back to the booking date for older records that don't have one)
 
 ### WhatsApp Integration
 
@@ -44,11 +44,22 @@ Loading Cost = ceil(tubes ÷ 60) × RWF 350
 
 Example: 500 tubes = 9 sacks × RWF 350 = **RWF 3,150**
 
+### Delivery Tracking
+
+- Record partial or full deliveries against a booking from the **Bookings**, **Delivered**, or **Overdue** views
+- Each delivery is a separate, timestamped entry (tubes delivered + optional note) — a booking can be delivered in several trips
+- Full CRUD on individual deliveries: every delivery line in the **Delivered** view has a **⋮** menu to **edit** (change the amount/note) or **delete** that single entry
+- **Over-delivery protection:** the amount delivered can never exceed the tubes booked. This is enforced atomically in the database (not just in the UI), so two requests for the same booking — e.g. a double click on "Confirm Delivery" — can't both succeed and push pending tubes negative
+
+### Overdue Deliveries
+
+A dedicated **Overdue** view lists every booking whose 30-day delivery window (from inoculation) has passed while it still has tubes pending — the deliveries that were missed. It shows the total count, total tubes still owed, and each farmer's name, phone, and location, with quick links to deliver or message them. The same list is included in the PDF report.
+
 ### Report Tab
 
 **On-screen analytics:**
 
-- KPI cards — total bookings, tubes, revenue, upcoming deliveries
+- KPI cards — total bookings, tubes, revenue, upcoming deliveries, **overdue deliveries**
 - Monthly breakdown (bookings, tubes, revenue, average per booking)
 - Bookings by location with percentage share
 - Top 5 farmers by volume
@@ -57,7 +68,7 @@ Example: 500 tubes = 9 sacks × RWF 350 = **RWF 3,150**
 **Downloadable PDF report** (pure JavaScript — no Python required):
 
 - Page 1: header banner, KPI cards, monthly summary, location breakdown
-- Page 2: full booking register with totals row, upcoming deliveries
+- Page 2: full booking register with totals row, upcoming deliveries, **and overdue deliveries**
 - Days remaining colour-coded — 🔴 7 days or fewer, 🟡 14 days or fewer, 🟢 more than 14 days
 - Footer on every page with page number and generation timestamp
 
@@ -100,23 +111,47 @@ miru-bookings/
 ├── app/
 │   ├── api/
 │   │   ├── bookings/
-│   │   │   ├── route.js          # GET all bookings, POST new booking
+│   │   │   ├── route.js                          # GET all bookings, POST new booking
 │   │   │   └── [id]/
-│   │   │       └── route.js      # PUT update, DELETE by ID
+│   │   │       ├── route.js                      # PUT update, DELETE booking by ID
+│   │   │       └── deliveries/
+│   │   │           ├── route.js                  # GET history, POST new delivery (atomic)
+│   │   │           └── [deliveryId]/
+│   │   │               └── route.js              # PUT edit, DELETE a single delivery (atomic)
 │   │   └── report/
-│   │       └── route.js          # GET — generates and streams PDF
-│   ├── layout.js                 # Root HTML layout and metadata
-│   └── page.js                   # Entry point — renders BookingApp
+│   │       └── route.js                          # GET — generates and streams PDF
+│   ├── layout.js                                 # Root HTML layout and metadata
+│   └── page.js                                   # Entry point — renders BookingApp
 │
 ├── components/
-│   └── BookingApp.js             # Full responsive UI (all views)
+│   ├── BookingApp.js                             # Orchestrator: state, data-fetching, layout
+│   └── booking/
+│       ├── Toast.js                              # Toast notification
+│       ├── UserMenu.js                           # Account menu + sign out
+│       ├── ReminderCard.js                       # "Due in 3 days" dashboard banner
+│       ├── hooks/useIsMobile.js                  # Responsive layout detection
+│       ├── form/BookingForm.js                   # Create/edit booking form
+│       ├── bookingItems/
+│       │   ├── MobileBookingCard.js
+│       │   └── DesktopBookingRow.js
+│       ├── modals/
+│       │   ├── ConfirmModal.js                   # Generic delete/confirm dialog
+│       │   ├── WhatsAppModal.js                  # WhatsApp message preview
+│       │   ├── DeliveryModal.js                  # Record a new delivery
+│       │   └── EditDeliveryModal.js              # Edit an existing delivery
+│       ├── delivery/DeliveryActionsMenu.js       # "⋮" edit/delete menu per delivery row
+│       └── views/
+│           ├── DeliveredView.js                  # Delivery history per booking
+│           ├── OverdueView.js                    # Missed deliveries
+│           └── ReportView.js                     # On-screen analytics
 │
 ├── lib/
-│   ├── mongodb.js                # MongoDB connection singleton
+│   ├── mongodb.js                  # MongoDB connection singleton
 │   ├── models/
-│   │   └── Booking.js            # Mongoose schema and model
-│   ├── api.js                    # Client API calls + localStorage fallback
-│   └── utils.js                  # Shared helpers (dates, WhatsApp, Excel)
+│   │   └── Booking.js              # Mongoose schema and model
+│   ├── booking-helpers.js          # Server-side: normalize/delivery-date/overdue (shared by all API routes)
+│   ├── api.js                      # Client API calls + localStorage fallback
+│   └── utils.js                    # Client-side helpers (dates, WhatsApp, reminders, Excel)
 │
 ├── .env.local                    # Your secrets — never commit this file
 ├── .env.local.example            # Template showing required variables
@@ -126,6 +161,8 @@ miru-bookings/
 ├── package.json
 └── README.md
 ```
+
+Each piece of UI lives in its own small file under `components/booking/`, and every API route shares the same `lib/booking-helpers.js` for computing delivered/pending tubes and delivery dates — so a bugfix or a business-rule change (like the 30-day window) only needs to happen in one place.
 
 ---
 
@@ -244,13 +281,17 @@ Vercel automatically redeploys every time you push to your main branch.
 
 All endpoints are under `/api/`. Booking endpoints return JSON; the report endpoint returns a PDF file.
 
-| Method   | Endpoint            | Description            |
-| -------- | ------------------- | ---------------------- |
-| `GET`    | `/api/bookings`     | Fetch all bookings     |
-| `POST`   | `/api/bookings`     | Create a new booking   |
-| `PUT`    | `/api/bookings/:id` | Update a booking by ID |
-| `DELETE` | `/api/bookings/:id` | Delete a booking by ID |
-| `GET`    | `/api/report`       | Download PDF report    |
+| Method   | Endpoint                                   | Description                                         |
+| -------- | ------------------------------------------- | ---------------------------------------------------- |
+| `GET`    | `/api/bookings`                             | Fetch all bookings                                   |
+| `POST`   | `/api/bookings`                             | Create a new booking                                 |
+| `PUT`    | `/api/bookings/:id`                         | Update a booking by ID                               |
+| `DELETE` | `/api/bookings/:id`                         | Delete a booking by ID                               |
+| `GET`    | `/api/bookings/:id/deliveries`              | List delivery history for a booking                  |
+| `POST`   | `/api/bookings/:id/deliveries`              | Record a new delivery (atomic — can't over-deliver)  |
+| `PUT`    | `/api/bookings/:id/deliveries/:deliveryId`  | Edit a single delivery's amount/note (atomic)        |
+| `DELETE` | `/api/bookings/:id/deliveries/:deliveryId`  | Remove a single delivery                             |
+| `GET`    | `/api/report`                               | Download PDF report                                  |
 
 ### Booking object
 

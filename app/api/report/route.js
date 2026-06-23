@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { connectDB } from "@/lib/mongodb";
 import Booking from "@/lib/models/Booking";
+import { normalizeBooking, getDeliveryDate, isOverdue } from "@/lib/booking-helpers";
 
 const MONTHS_SHORT = [
   "Jan",
@@ -25,12 +26,6 @@ function formatDate(d) {
   ).padStart(2, "0")}/${dt.getFullYear()}`;
 }
 
-function getDeliveryDate(bookingDate) {
-  const d = new Date(bookingDate);
-  d.setDate(d.getDate() + 30);
-  return d;
-}
-
 function hexToRgb(hex) {
   return [
     parseInt(hex.slice(1, 3), 16),
@@ -43,10 +38,7 @@ export async function GET() {
   try {
     await connectDB();
     const raw = await Booking.find().sort({ bookingDate: 1 }).lean();
-    const bookings = raw.map(({ _id, ...rest }) => ({
-      ...rest,
-      id: _id.toString(),
-    }));
+    const bookings = raw.map(normalizeBooking);
 
     const PRICE = 600;
     const totalTubes = bookings.reduce((s, b) => s + b.tubes, 0);
@@ -75,9 +67,13 @@ export async function GET() {
       byLocation[b.location].count += 1;
     });
 
+    // "Upcoming" and "Overdue" partition the bookings that still have
+    // tubes pending — a booking that's fully delivered is neither,
+    // even if its 30-day window happens to fall in the future/past.
     const upcoming = bookings.filter(
-      (b) => getDeliveryDate(b.bookingDate) >= today
+      (b) => b.tubesPending > 0 && !isOverdue(b, today)
     );
+    const overdue = bookings.filter((b) => isOverdue(b, today));
 
     const { jsPDF } = await import("jspdf");
     const autoTable = (await import("jspdf-autotable")).default;
@@ -145,17 +141,18 @@ export async function GET() {
       { label: "TOTAL TUBES", value: totalTubes.toLocaleString() },
       { label: "TOTAL REVENUE (RWF)", value: totalRevenue.toLocaleString() },
       { label: "UPCOMING DELIVERIES", value: String(upcoming.length) },
+      { label: "OVERDUE DELIVERIES", value: String(overdue.length), alert: overdue.length > 0 },
     ];
-    const cardW = (CW - 6) / 4;
+    const cardW = (CW - 8) / 5;
     kpis.forEach((k, i) => {
       const x = MARGIN + i * (cardW + 2);
-      doc.setFillColor(...PALE);
+      doc.setFillColor(...(k.alert ? [253, 232, 232] : PALE));
       doc.roundedRect(x, y, cardW, 18, 2, 2, "F");
-      doc.setFillColor(...ACCENT);
+      doc.setFillColor(...(k.alert ? RED : ACCENT));
       doc.rect(x, y + 2, 1.2, 14, "F");
       doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
-      doc.setTextColor(...ACCENT);
+      doc.setTextColor(...(k.alert ? RED : ACCENT));
       doc.text(k.value, x + cardW / 2, y + 9, { align: "center" });
       doc.setFontSize(6.5);
       doc.setFont("helvetica", "normal");
@@ -265,7 +262,7 @@ export async function GET() {
       b.tubes.toLocaleString(),
       `RWF ${(b.tubes * PRICE).toLocaleString()}`,
       formatDate(b.bookingDate),
-      formatDate(getDeliveryDate(b.bookingDate)),
+      formatDate(getDeliveryDate(b)),
     ]);
     detailRows.push([
       "",
@@ -341,7 +338,7 @@ export async function GET() {
       const upRows = [...upcoming]
         .sort((a, b) => new Date(a.bookingDate) - new Date(b.bookingDate))
         .map((b) => {
-          const dd = getDeliveryDate(b.bookingDate);
+          const dd = getDeliveryDate(b);
           const daysLeft = Math.ceil((dd - today) / (1000 * 60 * 60 * 24));
           return [
             b.name,
@@ -387,6 +384,68 @@ export async function GET() {
           3: { cellWidth: CW * 0.1, halign: "right" },
           4: { cellWidth: CW * 0.18, halign: "center" },
           5: { cellWidth: CW * 0.12, halign: "center" },
+        },
+        margin: { left: MARGIN, right: MARGIN },
+      });
+    }
+
+    // Overdue deliveries — missed the 30-days-from-inoculation window
+    // and still have tubes pending.
+    if (overdue.length > 0) {
+      y = doc.lastAutoTable ? doc.lastAutoTable.finalY + 10 : y + 10;
+      if (y > 230) {
+        doc.addPage();
+        pageNum++;
+        y = MARGIN;
+      }
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...RED);
+      doc.text(`Overdue Deliveries (${overdue.length})`, MARGIN, y);
+      doc.setDrawColor(...RED);
+      doc.line(MARGIN, y + 1.5, MARGIN + CW, y + 1.5);
+      y += 5;
+
+      const overdueRows = [...overdue]
+        .sort((a, b) => getDeliveryDate(a) - getDeliveryDate(b))
+        .map((b) => {
+          const dd = getDeliveryDate(b);
+          const daysLate = Math.floor((today - dd) / (1000 * 60 * 60 * 24));
+          return [
+            b.name,
+            b.phone,
+            b.location,
+            (b.tubesPending ?? b.tubes).toLocaleString(),
+            formatDate(dd),
+            `${daysLate}d`,
+          ];
+        });
+
+      autoTable(doc, {
+        startY: y,
+        head: [
+          ["Farmer", "Phone", "Location", "Tubes Pending", "Was Due", "Days Late"],
+        ],
+        body: overdueRows,
+        theme: "plain",
+        styles: { fontSize: 8, cellPadding: 3, textColor: [30, 50, 30] },
+        headStyles: { fillColor: RED, textColor: WHITE, fontStyle: "bold" },
+        alternateRowStyles: { fillColor: [253, 232, 232] },
+        didParseCell: (d) => {
+          if (d.column.index === 1 && d.section === "body")
+            d.cell.styles.fontStyle = "bold";
+          if (d.column.index === 5 && d.section === "body") {
+            d.cell.styles.fontStyle = "bold";
+            d.cell.styles.textColor = RED;
+          }
+        },
+        columnStyles: {
+          0: { cellWidth: CW * 0.22, fontStyle: "bold" },
+          1: { cellWidth: CW * 0.16 },
+          2: { cellWidth: CW * 0.2 },
+          3: { cellWidth: CW * 0.14, halign: "right" },
+          4: { cellWidth: CW * 0.14, halign: "center" },
+          5: { cellWidth: CW * 0.14, halign: "center" },
         },
         margin: { left: MARGIN, right: MARGIN },
       });
