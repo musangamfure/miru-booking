@@ -11,6 +11,7 @@ A full-stack web application for managing mushroom tube bookings, built with **N
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
 - [MongoDB Atlas Setup](#mongodb-atlas-setup)
+- [Google OAuth Setup](#google-oauth-setup)
 - [Environment Variables](#environment-variables)
 - [Running Locally](#running-locally)
 - [Deploying to Vercel](#deploying-to-vercel)
@@ -91,8 +92,9 @@ If MongoDB Atlas is unreachable, data is automatically read from and saved to **
 ## Tech Stack
 
 | Layer          | Technology                       |
-| -------------- | -------------------------------- |
+| -------------- | --------------------------------- |
 | Framework      | Next.js 14 (App Router)          |
+| Language       | TypeScript                       |
 | Frontend       | React 18                         |
 | Database       | MongoDB Atlas (free M0 tier)     |
 | ODM            | Mongoose                         |
@@ -111,58 +113,62 @@ miru-bookings/
 ├── app/
 │   ├── api/
 │   │   ├── bookings/
-│   │   │   ├── route.js                          # GET all bookings, POST new booking
+│   │   │   ├── route.ts                          # GET all bookings, POST new booking
 │   │   │   └── [id]/
-│   │   │       ├── route.js                      # PUT update, DELETE booking by ID
+│   │   │       ├── route.ts                      # PUT update, DELETE booking by ID
 │   │   │       └── deliveries/
-│   │   │           ├── route.js                  # GET history, POST new delivery (atomic)
+│   │   │           ├── route.ts                  # GET history, POST new delivery (atomic)
 │   │   │           └── [deliveryId]/
-│   │   │               └── route.js              # PUT edit, DELETE a single delivery (atomic)
+│   │   │               └── route.ts              # PUT edit, DELETE a single delivery (atomic)
 │   │   └── report/
-│   │       └── route.js                          # GET — generates and streams PDF
-│   ├── layout.js                                 # Root HTML layout and metadata
-│   └── page.js                                   # Entry point — renders BookingApp
+│   │       └── route.ts                          # GET — generates and streams PDF
+│   ├── layout.tsx                                 # Root HTML layout and metadata
+│   └── page.tsx                                   # Entry point — renders BookingApp
 │
 ├── components/
-│   ├── BookingApp.js                             # Orchestrator: state, data-fetching, layout
+│   ├── BookingApp.tsx                             # Orchestrator: state, data-fetching, layout
 │   └── booking/
-│       ├── Toast.js                              # Toast notification
-│       ├── UserMenu.js                           # Account menu + sign out
-│       ├── ReminderCard.js                       # "Due in 3 days" dashboard banner
-│       ├── hooks/useIsMobile.js                  # Responsive layout detection
-│       ├── form/BookingForm.js                   # Create/edit booking form
+│       ├── Toast.tsx                              # Toast notification
+│       ├── UserMenu.tsx                           # Account menu + sign out
+│       ├── ReminderCard.tsx                       # "Due in 3 days" dashboard banner
+│       ├── hooks/useIsMobile.ts                   # Responsive layout detection
+│       ├── form/BookingForm.tsx                   # Create/edit booking form
 │       ├── bookingItems/
-│       │   ├── MobileBookingCard.js
-│       │   └── DesktopBookingRow.js
+│       │   ├── MobileBookingCard.tsx
+│       │   └── DesktopBookingRow.tsx
 │       ├── modals/
-│       │   ├── ConfirmModal.js                   # Generic delete/confirm dialog
-│       │   ├── WhatsAppModal.js                  # WhatsApp message preview
-│       │   ├── DeliveryModal.js                  # Record a new delivery
-│       │   └── EditDeliveryModal.js              # Edit an existing delivery
-│       ├── delivery/DeliveryActionsMenu.js       # "⋮" edit/delete menu per delivery row
+│       │   ├── ConfirmModal.tsx                   # Generic delete/confirm dialog
+│       │   ├── WhatsAppModal.tsx                  # WhatsApp message preview
+│       │   ├── DeliveryModal.tsx                  # Record a new delivery
+│       │   └── EditDeliveryModal.tsx              # Edit an existing delivery
+│       ├── delivery/DeliveryActionsMenu.tsx       # "⋮" edit/delete menu per delivery row
 │       └── views/
-│           ├── DeliveredView.js                  # Delivery history per booking
-│           ├── OverdueView.js                    # Missed deliveries
-│           └── ReportView.js                     # On-screen analytics
+│           ├── DeliveredView.tsx                  # Delivery history per booking
+│           ├── OverdueView.tsx                    # Missed deliveries
+│           └── ReportView.tsx                     # On-screen analytics
 │
 ├── lib/
-│   ├── mongodb.js                  # MongoDB connection singleton
+│   ├── types.ts                    # Shared domain types (Booking, Delivery, ...)
+│   ├── errorMessage.ts             # Safely extracts a message from an `unknown` catch value
+│   ├── mongodb.ts                  # MongoDB connection singleton
 │   ├── models/
-│   │   └── Booking.js              # Mongoose schema and model
-│   ├── booking-helpers.js          # Server-side: normalize/delivery-date/overdue (shared by all API routes)
-│   ├── api.js                      # Client API calls + localStorage fallback
-│   └── utils.js                    # Client-side helpers (dates, WhatsApp, reminders, Excel)
+│   │   └── Booking.ts              # Mongoose schema, model, and IBooking/IDelivery interfaces
+│   ├── booking-helpers.ts          # Server-side: normalize/delivery-date/overdue (shared by all API routes)
+│   ├── api.ts                      # Client API calls + localStorage fallback
+│   └── utils.ts                    # Client-side helpers (dates, WhatsApp, reminders, Excel)
 │
 ├── .env.local                    # Your secrets — never commit this file
 ├── .env.local.example            # Template showing required variables
 ├── .gitignore
-├── jsconfig.json                 # Enables the @/ import alias
+├── tsconfig.json                 # TypeScript config + the @/ import alias
 ├── next.config.js
 ├── package.json
 └── README.md
 ```
 
-Each piece of UI lives in its own small file under `components/booking/`, and every API route shares the same `lib/booking-helpers.js` for computing delivered/pending tubes and delivery dates — so a bugfix or a business-rule change (like the 30-day window) only needs to happen in one place.
+Each piece of UI lives in its own small file under `components/booking/`, and every API route shares the same `lib/booking-helpers.ts` for computing delivered/pending tubes and delivery dates — so a bugfix or a business-rule change (like the 30-day window) only needs to happen in one place. Shared types live in `lib/types.ts`, so the shape of a `Booking` or `Delivery` is defined once and checked everywhere it's used — client components, API routes, and the PDF report all type-check against the same definitions.
+
+Run `npm run typecheck` at any time to type-check the whole project without building it.
 
 ---
 
@@ -227,13 +233,58 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 ---
 
+## Google OAuth Setup
+
+Sign-in uses Google via NextAuth — you need an OAuth Client ID/Secret from Google Cloud Console.
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com) and create (or select) a project
+2. Go to **APIs & Services** → **OAuth consent screen**
+   - User type: **External** (unless you have a Google Workspace org)
+   - Fill in an app name and your email, then save
+   - Add your own Google account under **Test users** if the app stays in "Testing" mode
+3. Go to **APIs & Services** → **Credentials** → **Create Credentials** → **OAuth client ID**
+   - Application type: **Web application**
+   - **Authorized JavaScript origins:**
+     ```
+     http://localhost:3000
+     https://your-app.vercel.app
+     ```
+   - **Authorized redirect URIs:**
+     ```
+     http://localhost:3000/api/auth/callback/google
+     https://your-app.vercel.app/api/auth/callback/google
+     ```
+     (add the Vercel URL once you know it; you can edit this later)
+4. Click **Create** — copy the **Client ID** and **Client Secret** into `.env.local` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`
+
+---
+
 ## Environment Variables
 
-Your `.env.local` file should contain:
+Copy the template and fill it in:
+
+```bash
+cp .env.local.example .env.local
+```
+
+Your `.env.local` file needs:
 
 ```env
 MONGODB_URI=mongodb+srv://youruser:yourpassword@cluster0.xxxxx.mongodb.net/miru-bookings?retryWrites=true&w=majority
+AUTH_SECRET=your-random-secret
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
 ```
+
+| Variable               | Required | Where to get it                                   |
+| ----------------------- | -------- | -------------------------------------------------- |
+| `MONGODB_URI`           | Yes      | [MongoDB Atlas Setup](#mongodb-atlas-setup)        |
+| `AUTH_SECRET`           | Yes      | Run `npx auth secret` or `openssl rand -base64 32` |
+| `GOOGLE_CLIENT_ID`      | Yes      | [Google OAuth Setup](#google-oauth-setup)          |
+| `GOOGLE_CLIENT_SECRET`  | Yes      | [Google OAuth Setup](#google-oauth-setup)          |
+| `AUTH_URL`              | No       | Only if sign-in redirects misbehave locally        |
+
+Without `AUTH_SECRET`/`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` set, the app will fail to start sign-in (you'll be stuck on `/login` or see an OAuth error) — `MONGODB_URI` alone is not enough.
 
 **Important notes:**
 
@@ -268,10 +319,12 @@ Vercel is the recommended platform for this project. **GitHub Pages cannot be us
 1. Push your project to a GitHub repository (confirm `.env.local` is not committed)
 2. Go to [vercel.com](https://vercel.com) and sign in with GitHub
 3. Click **Add New Project** and import your repository
-4. In **Environment Variables**, add:
-   - **Name:** `MONGODB_URI`
-   - **Value:** your full MongoDB Atlas connection string
+4. In **Environment Variables**, add all four:
+   - `MONGODB_URI` — your full MongoDB Atlas connection string
+   - `AUTH_SECRET` — same one from your `.env.local` (or generate a fresh one for production)
+   - `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — from [Google OAuth Setup](#google-oauth-setup)
 5. Click **Deploy**
+6. Once deployed, copy your Vercel URL (e.g. `https://your-app.vercel.app`) and add it to your Google OAuth client's **Authorized JavaScript origins** and **Authorized redirect URIs** (as `https://your-app.vercel.app/api/auth/callback/google`) — sign-in will fail with a `redirect_uri_mismatch` error until this matches exactly
 
 Vercel automatically redeploys every time you push to your main branch.
 
@@ -318,7 +371,7 @@ All key business values are defined in `lib/utils.js`:
 | What to change           | Where                     | Current value                  |
 | ------------------------ | ------------------------- | ------------------------------ |
 | Price per tube           | `PRICE_PER_TUBE` constant | RWF 600                        |
-| Delivery window          | `getDeliveryDate()`       | 30 days from booking date      |
+| Delivery window          | `getDeliveryDate()`       | 30 days from inoculation date  |
 | Loading cost rate        | `buildWhatsAppMessage()`  | RWF 350 per sack of 60 tubes   |
 | WhatsApp message wording | `buildWhatsAppMessage()`  | —                              |
 | Excel file name          | `exportToExcel()`         | `Miru_Mushrooms_Bookings.xlsx` |
@@ -330,7 +383,7 @@ To rename the database, change `miru-bookings` in your `MONGODB_URI` to any name
 ## Troubleshooting
 
 **`Module not found: Can't resolve '@/components/BookingApp'`**
-The `jsconfig.json` file is missing from the project root. Create it:
+The `tsconfig.json` file is missing from the project root, or its `paths` block was removed. Make sure it includes:
 
 ```json
 {
@@ -345,7 +398,13 @@ The `jsconfig.json` file is missing from the project root. Create it:
 Your MongoDB password contains a special character that breaks the URL. Encode `@` as `%40` and `!` as `%21` in the password portion of your connection string.
 
 **`Python was not found` error when downloading the PDF**
-You have an old version of `app/api/report/route.js` that used Python. The current version uses jsPDF (pure JavaScript) and needs no Python. Replace the file and run `npm install` again.
+You have an old version of `app/api/report/route.ts` that used Python. The current version uses jsPDF (pure JavaScript/TypeScript) and needs no Python. Replace the file and run `npm install` again.
+
+**Stuck redirecting to `/login`, or `[auth][error]` in the server console**
+One of `AUTH_SECRET`, `GOOGLE_CLIENT_ID`, or `GOOGLE_CLIENT_SECRET` is missing or empty in `.env.local` (or in Vercel's Environment Variables). All three are required — `MONGODB_URI` alone does not enable sign-in. See [Environment Variables](#environment-variables) and [Google OAuth Setup](#google-oauth-setup).
+
+**`redirect_uri_mismatch` error from Google during sign-in**
+The URL you're running on isn't listed in your Google OAuth client's **Authorized redirect URIs**. It must match exactly, including `http`/`https` and the `/api/auth/callback/google` path — e.g. `http://localhost:3000/api/auth/callback/google` for local dev, or `https://your-app.vercel.app/api/auth/callback/google` in production.
 
 **Blank screen after deploying to GitHub Pages**
 GitHub Pages does not support server-side code. Use Vercel instead — it is free and requires no extra configuration.
