@@ -54,7 +54,11 @@ export async function GET() {
 
     const PRICE = 600;
     const totalTubes = bookings.reduce((s, b) => s + b.tubes, 0);
+    const totalTubesRefunded = bookings.reduce((s, b) => s + (b.tubesRefunded || 0), 0);
+    const totalAmountRefunded = bookings.reduce((s, b) => s + (b.amountRefunded || 0), 0);
+    const totalTubesNet = bookings.reduce((s, b) => s + b.tubesNet, 0);
     const totalRevenue = totalTubes * PRICE;
+    const totalRevenueNet = totalTubesNet * PRICE;
     const today = new Date();
 
     const byMonth: Record<string, MonthStat> = {};
@@ -63,15 +67,15 @@ export async function GET() {
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       if (!byMonth[key])
         byMonth[key] = { tubes: 0, count: 0, revenue: 0, month: d.getMonth() };
-      byMonth[key].tubes += b.tubes;
+      byMonth[key].tubes += b.tubesNet;          // net after refunds
       byMonth[key].count += 1;
-      byMonth[key].revenue += b.tubes * PRICE;
+      byMonth[key].revenue += b.tubesNet * PRICE;
     });
 
     const byLocation: Record<string, LocationStat> = {};
     bookings.forEach((b) => {
       if (!byLocation[b.location]) byLocation[b.location] = { tubes: 0, count: 0 };
-      byLocation[b.location].tubes += b.tubes;
+      byLocation[b.location].tubes += b.tubesNet; // net after refunds
       byLocation[b.location].count += 1;
     });
 
@@ -146,8 +150,8 @@ export async function GET() {
     // KPI cards
     const kpis: Kpi[] = [
       { label: "TOTAL BOOKINGS", value: String(bookings.length) },
-      { label: "TOTAL TUBES", value: totalTubes.toLocaleString() },
-      { label: "TOTAL REVENUE (RWF)", value: totalRevenue.toLocaleString() },
+      { label: "NET TUBES", value: totalTubesNet.toLocaleString() },
+      { label: "NET REVENUE (RWF)", value: totalRevenueNet.toLocaleString() },
       { label: "UPCOMING DELIVERIES", value: String(upcoming.length) },
       { label: "OVERDUE DELIVERIES", value: String(overdue.length), alert: overdue.length > 0 },
     ];
@@ -227,7 +231,7 @@ export async function GET() {
         loc,
         String(v.count),
         v.tubes.toLocaleString(),
-        totalTubes ? `${Math.round((v.tubes / totalTubes) * 100)}%` : "0%",
+        totalTubesNet ? `${Math.round((v.tubes / totalTubesNet) * 100)}%` : "0%",
       ]);
 
     autoTable(doc, {
@@ -267,8 +271,9 @@ export async function GET() {
       b.name,
       b.phone,
       b.location,
-      b.tubes.toLocaleString(),
-      `RWF ${(b.tubes * PRICE).toLocaleString()}`,
+      b.tubesNet.toLocaleString(),
+      `RWF ${(b.tubesNet * PRICE).toLocaleString()}`,
+      b.tubesRefunded > 0 ? `${b.tubesRefunded.toLocaleString()} (RWF ${b.amountRefunded.toLocaleString()})` : "—",
       formatDate(b.bookingDate),
       formatDate(getDeliveryDate(b)),
     ]);
@@ -277,8 +282,9 @@ export async function GET() {
       "TOTAL",
       "",
       "",
-      totalTubes.toLocaleString(),
-      `RWF ${totalRevenue.toLocaleString()}`,
+      totalTubesNet.toLocaleString(),
+      `RWF ${totalRevenueNet.toLocaleString()}`,
+      totalTubesRefunded > 0 ? `${totalTubesRefunded.toLocaleString()} (RWF ${totalAmountRefunded.toLocaleString()})` : "—",
       "",
       "",
     ]);
@@ -286,33 +292,32 @@ export async function GET() {
     autoTable(doc, {
       startY: y,
       head: [
-        ["#", "Farmer Name", "Phone", "Location", "Tubes", "Amount (RWF)", "Booked", "Delivery"],
+        ["#", "Farmer Name", "Phone", "Location", "Net Tubes", "Net Amount", "Refunded", "Booked", "Delivery"],
       ],
       body: detailRows,
       theme: "plain",
-      styles: { fontSize: 7.5, cellPadding: 2.5, textColor: [30, 50, 30] },
-      headStyles: {
-        fillColor: DARK,
-        textColor: WHITE,
-        fontStyle: "bold",
-        fontSize: 7.5,
-      },
+      styles: { fontSize: 7, cellPadding: 2.5, textColor: [30, 50, 30] },
+      headStyles: { fillColor: DARK, textColor: WHITE, fontStyle: "bold", fontSize: 7 },
       alternateRowStyles: { fillColor: PALE },
       didParseCell: (d: any) => {
         if (d.row.index === detailRows.length - 1) {
           d.cell.styles.fontStyle = "bold";
           d.cell.styles.fillColor = hexToRgb("#d5edd6");
         }
+        if (d.column.index === 6 && d.section === "body" && d.cell.text[0] !== "—") {
+          d.cell.styles.textColor = RED;
+        }
       },
       columnStyles: {
-        0: { cellWidth: CW * 0.05, halign: "center" },
-        1: { cellWidth: CW * 0.17, fontStyle: "bold" },
-        2: { cellWidth: CW * 0.13 },
-        3: { cellWidth: CW * 0.15 },
+        0: { cellWidth: CW * 0.04, halign: "center" },
+        1: { cellWidth: CW * 0.15, fontStyle: "bold" },
+        2: { cellWidth: CW * 0.12 },
+        3: { cellWidth: CW * 0.13 },
         4: { cellWidth: CW * 0.08, halign: "right" },
-        5: { cellWidth: CW * 0.14, halign: "right" },
-        6: { cellWidth: CW * 0.14, halign: "center" },
-        7: { cellWidth: CW * 0.14, halign: "center" },
+        5: { cellWidth: CW * 0.12, halign: "right" },
+        6: { cellWidth: CW * 0.14, halign: "right" },
+        7: { cellWidth: CW * 0.11, halign: "center" },
+        8: { cellWidth: CW * 0.11, halign: "center" },
       },
       margin: { left: MARGIN, right: MARGIN },
       showHead: "everyPage",

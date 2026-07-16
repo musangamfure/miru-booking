@@ -16,7 +16,7 @@
 // with `success: false` is thrown as a normal error instead.
 // ─────────────────────────────────────────────────────────────────
 
-import type { Booking, BookingFormData, DataSource, Delivery } from "@/lib/types";
+import type { Booking, BookingFormData, DataSource, Delivery, RefundInput } from "@/lib/types";
 
 const LS_KEY = "miru_bookings";
 
@@ -36,11 +36,19 @@ const lsSet = (data: Booking[]): void =>
   localStorage.setItem(LS_KEY, JSON.stringify(data));
 
 function calcDeliveryFields(b: Partial<Booking> & { tubes: number }): Booking {
-  const totalDelivered = (b.deliveries || []).reduce((s, d) => s + d.tubesDelivered, 0);
+  const deliveries = b.deliveries || [];
+  const refunds = b.refunds || [];
+  const totalDelivered = deliveries.reduce((s, d) => s + d.tubesDelivered, 0);
+  const totalRefundedTubes = refunds.reduce((s, r) => s + r.tubesRefunded, 0);
+  const totalRefundedAmount = refunds.reduce((s, r) => s + r.amountRefunded, 0);
+  const tubesNet = b.tubes - totalRefundedTubes;
   return {
     ...(b as Booking),
     tubesDelivered: totalDelivered,
-    tubesPending: b.tubes - totalDelivered,
+    tubesRefunded: totalRefundedTubes,
+    amountRefunded: totalRefundedAmount,
+    tubesNet,
+    tubesPending: tubesNet - totalDelivered,
   };
 }
 
@@ -236,4 +244,53 @@ export async function apiDeleteDelivery(
   const updated = calcDeliveryFields({ ...booking, deliveries: updatedDeliveries });
   lsSet(current.map((b) => (b.id === bookingId ? updated : b)));
   return { data: updated, source: "localStorage" };
+}
+
+// ── Refund CRUD ────────────────────────────────────────────────
+
+export async function apiCreateRefund(
+  bookingId: string,
+  data: RefundInput
+): Promise<ApiResultWithSource<Booking>> {
+  const result = await request(`/api/bookings/${bookingId}/refunds`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!result.offline) {
+    lsSet(lsGet().map((b) => (b.id === bookingId ? result.json.data : b)));
+    return { data: result.json.data, source: "mongodb" };
+  }
+  throw new Error("Cannot create a refund while offline.");
+}
+
+export async function apiUpdateRefund(
+  bookingId: string,
+  refundId: string,
+  data: RefundInput
+): Promise<ApiResultWithSource<Booking>> {
+  const result = await request(`/api/bookings/${bookingId}/refunds/${refundId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  if (!result.offline) {
+    lsSet(lsGet().map((b) => (b.id === bookingId ? result.json.data : b)));
+    return { data: result.json.data, source: "mongodb" };
+  }
+  throw new Error("Cannot update a refund while offline.");
+}
+
+export async function apiDeleteRefund(
+  bookingId: string,
+  refundId: string
+): Promise<ApiResultWithSource<Booking>> {
+  const result = await request(`/api/bookings/${bookingId}/refunds/${refundId}`, {
+    method: "DELETE",
+  });
+  if (!result.offline) {
+    lsSet(lsGet().map((b) => (b.id === bookingId ? result.json.data : b)));
+    return { data: result.json.data, source: "mongodb" };
+  }
+  throw new Error("Cannot delete a refund while offline.");
 }

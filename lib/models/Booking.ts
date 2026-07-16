@@ -8,6 +8,15 @@ export interface IDelivery {
   note: string;
 }
 
+/** A single refund, as stored in MongoDB. */
+export interface IRefund {
+  _id: Types.ObjectId;
+  tubesRefunded: number;
+  amountRefunded: number;
+  reason: string;
+  refundedAt: Date;
+}
+
 /** A booking document, as stored in MongoDB. */
 export interface IBooking extends Document {
   _id: Types.ObjectId;
@@ -15,10 +24,10 @@ export interface IBooking extends Document {
   phone: string;
   tubes: number;
   bookingDate: string;
-  /** Imigina yatewe umurama — delivery is due 30 days after this date. */
   inoculationDate: string;
   location: string;
   deliveries: IDelivery[];
+  refunds: IRefund[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,20 +38,23 @@ const DeliverySchema = new Schema<IDelivery>({
   note: { type: String, default: "" },
 });
 
+const RefundSchema = new Schema<IRefund>({
+  tubesRefunded: { type: Number, required: true, min: 0 },
+  amountRefunded: { type: Number, required: true, min: 0 },
+  reason: { type: String, required: true, trim: true },
+  refundedAt: { type: Date, default: Date.now },
+});
+
 const BookingSchema = new Schema<IBooking>(
   {
     name: { type: String, required: true, trim: true },
     phone: { type: String, required: true, trim: true },
     tubes: { type: Number, required: true, min: 1 },
     bookingDate: { type: String, required: true },
-    // Date the mushroom tubes were inoculated (Imigina yatewe umurama).
-    // Delivery is due 30 days after this date. Optional for backward
-    // compatibility with bookings created before this field existed —
-    // see getDeliveryDate() in lib/booking-helpers.ts for the fallback.
     inoculationDate: { type: String, default: "" },
     location: { type: String, required: true, trim: true },
-    // default: [] ensures existing documents without this field work safely
     deliveries: { type: [DeliverySchema], default: () => [] },
+    refunds: { type: [RefundSchema], default: () => [] },
   },
   { timestamps: true }
 );

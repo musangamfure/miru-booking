@@ -8,9 +8,10 @@ export interface OverdueViewProps {
   isMobile: boolean | null;
   onDeliver: (b: Booking) => void;
   onSendReminder: (b: Booking) => void;
+  onRefund: (b: Booking) => void;
 }
 
-export function OverdueView({ bookings, isMobile, onDeliver, onSendReminder }: OverdueViewProps) {
+export function OverdueView({ bookings, isMobile, onDeliver, onSendReminder, onRefund }: OverdueViewProps) {
   const overdue = bookings
     .filter(isOverdue)
     .sort((a, b) => daysUntilDelivery(a) - daysUntilDelivery(b)); // most overdue first
@@ -151,20 +152,15 @@ export function OverdueView({ bookings, isMobile, onDeliver, onSendReminder }: O
                     </button>
                     <button
                       onClick={() => onDeliver(b)}
-                      style={{
-                        padding: "8px 12px",
-                        borderRadius: 7,
-                        border: "none",
-                        background: "#2d6a4f",
-                        color: "white",
-                        fontSize: 12,
-                        fontWeight: "bold",
-                        cursor: "pointer",
-                        fontFamily: "Georgia, serif",
-                        whiteSpace: "nowrap",
-                      }}
+                      style={{ padding: "8px 12px", borderRadius: 7, border: "none", background: "#2d6a4f", color: "white", fontSize: 12, fontWeight: "bold", cursor: "pointer", fontFamily: "Georgia, serif", whiteSpace: "nowrap" }}
                     >
                       🚚 Deliver
+                    </button>
+                    <button
+                      onClick={() => onRefund(b)}
+                      style={{ padding: "8px 12px", borderRadius: 7, border: "1px solid #7f1d1d", background: "transparent", color: "#f87171", fontSize: 12, fontWeight: "bold", cursor: "pointer", fontFamily: "Georgia, serif", whiteSpace: "nowrap" }}
+                    >
+                      💸 Refund
                     </button>
                   </div>
                 </div>

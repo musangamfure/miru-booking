@@ -21,6 +21,9 @@ import {
   apiRecordDelivery,
   apiUpdateDelivery,
   apiDeleteDelivery,
+  apiCreateRefund,
+  apiUpdateRefund,
+  apiDeleteRefund,
 } from "@/lib/api";
 import {
   formatDate,
@@ -31,7 +34,7 @@ import {
   PRICE_PER_TUBE,
 } from "@/lib/utils";
 import { errorMessage } from "@/lib/errorMessage";
-import type { Booking, BookingFormData, Delivery } from "@/lib/types";
+import type { Booking, BookingFormData, Delivery, Refund } from "@/lib/types";
 
 import { useIsMobile } from "@/components/booking/hooks/useIsMobile";
 import { Toast, type ToastProps } from "@/components/booking/Toast";
@@ -42,14 +45,24 @@ import { WhatsAppModal } from "@/components/booking/modals/WhatsAppModal";
 import { DeliveryModal } from "@/components/booking/modals/DeliveryModal";
 import { EditDeliveryModal } from "@/components/booking/modals/EditDeliveryModal";
 import { ReminderModal } from "@/components/booking/modals/ReminderModal";
+import { RefundModal } from "@/components/booking/modals/RefundModal";
 import { BookingForm } from "@/components/booking/form/BookingForm";
 import { MobileBookingCard } from "@/components/booking/bookingItems/MobileBookingCard";
 import { DesktopBookingRow } from "@/components/booking/bookingItems/DesktopBookingRow";
 import { DeliveredView } from "@/components/booking/views/DeliveredView";
 import { OverdueView } from "@/components/booking/views/OverdueView";
 import { ReportView } from "@/components/booking/views/ReportView";
+import { RefundsView } from "@/components/booking/views/RefundsView";
 
-type ViewName = "dashboard" | "bookings" | "delivered" | "overdue" | "add" | "form" | "report";
+type ViewName =
+  | "dashboard"
+  | "bookings"
+  | "delivered"
+  | "overdue"
+  | "add"
+  | "form"
+  | "report"
+  | "refunds";
 
 interface DeliveryTarget {
   booking: Booking;
@@ -79,8 +92,21 @@ export default function BookingApp() {
   const [downloading, setDownloading] = useState(false);
   const [deliveryBooking, setDeliveryBooking] = useState<Booking | null>(null);
   const [reminderBooking, setReminderBooking] = useState<Booking | null>(null);
-  const [editingDelivery, setEditingDelivery] = useState<DeliveryTarget | null>(null);
-  const [deletingDelivery, setDeletingDelivery] = useState<DeliveryTarget | null>(null);
+  // Refund state
+  const [refundBooking, setRefundBooking] = useState<Booking | null>(null);
+  const [editingRefund, setEditingRefund] = useState<{
+    booking: Booking;
+    refund: Refund;
+  } | null>(null);
+  const [deletingRefund, setDeletingRefund] = useState<{
+    booking: Booking;
+    refund: Refund;
+  } | null>(null);
+  const [editingDelivery, setEditingDelivery] = useState<DeliveryTarget | null>(
+    null
+  );
+  const [deletingDelivery, setDeletingDelivery] =
+    useState<DeliveryTarget | null>(null);
 
   // Extra client-side guard against firing two delivery requests for
   // the same booking (e.g. a double click slipping past the modal's
@@ -129,7 +155,11 @@ export default function BookingApp() {
     })();
   }, []);
 
-  const handleDelivery = async (bookingId: string, tubesDelivered: number, note: string) => {
+  const handleDelivery = async (
+    bookingId: string,
+    tubesDelivered: number,
+    note: string
+  ) => {
     if (inFlightDeliveries.current.has(bookingId)) return;
     inFlightDeliveries.current.add(bookingId);
     try {
@@ -175,6 +205,65 @@ export default function BookingApp() {
       showToast("Delivery removed.", "error");
     } catch (err) {
       showToast(errorMessage(err) || "Could not delete delivery.", "error");
+    }
+  };
+
+  const handleRefundCreate = async (
+    tubesRefunded: number,
+    amountRefunded: number,
+    reason: string
+  ) => {
+    if (!refundBooking) return;
+    try {
+      const { data } = await apiCreateRefund(refundBooking.id, {
+        tubesRefunded,
+        amountRefunded,
+        reason,
+      });
+      setBookings((prev) =>
+        prev.map((b) => (b.id === refundBooking.id ? data : b))
+      );
+      setRefundBooking(null);
+      showToast(
+        `Refund of ${tubesRefunded} tubes (RWF ${amountRefunded.toLocaleString()}) recorded.`,
+        "error"
+      );
+    } catch (err) {
+      showToast(errorMessage(err) || "Could not process refund.", "error");
+    }
+  };
+
+  const handleRefundEdit = async (
+    tubesRefunded: number,
+    amountRefunded: number,
+    reason: string
+  ) => {
+    if (!editingRefund) return;
+    const { booking, refund } = editingRefund;
+    try {
+      const { data } = await apiUpdateRefund(booking.id, refund.id, {
+        tubesRefunded,
+        amountRefunded,
+        reason,
+      });
+      setBookings((prev) => prev.map((b) => (b.id === booking.id ? data : b)));
+      setEditingRefund(null);
+      showToast("Refund updated.");
+    } catch (err) {
+      showToast(errorMessage(err) || "Could not update refund.", "error");
+    }
+  };
+
+  const handleRefundDelete = async () => {
+    if (!deletingRefund) return;
+    const { booking, refund } = deletingRefund;
+    try {
+      const { data } = await apiDeleteRefund(booking.id, refund.id);
+      setBookings((prev) => prev.map((b) => (b.id === booking.id ? data : b)));
+      setDeletingRefund(null);
+      showToast("Refund removed.");
+    } catch (err) {
+      showToast(errorMessage(err) || "Could not delete refund.", "error");
     }
   };
 
@@ -235,7 +324,8 @@ export default function BookingApp() {
   };
 
   const totalTubes = bookings.reduce((s, b) => s + b.tubes, 0);
-  const totalRevenue = totalTubes * PRICE_PER_TUBE;
+  const totalTubesNet = bookings.reduce((s, b) => s + b.tubesNet, 0);
+  const totalRevenue = totalTubesNet * PRICE_PER_TUBE;
   const pendingBookings = bookings.filter(
     (b) => (b.tubesPending ?? b.tubes) > 0
   );
@@ -275,8 +365,8 @@ export default function BookingApp() {
       accent: "#fbbf24",
     },
     {
-      label: "Tubes Booked",
-      value: totalTubes.toLocaleString(),
+      label: "Tubes Booked (Net)",
+      value: totalTubesNet.toLocaleString(),
       icon: "🌱",
       accent: "#2d6a4f",
     },
@@ -328,6 +418,36 @@ export default function BookingApp() {
           onClose={() => setReminderBooking(null)}
         />
       )}
+      {refundBooking && (
+        <RefundModal
+          isMobile={isMobile}
+          booking={refundBooking}
+          onConfirm={handleRefundCreate}
+          onCancel={() => setRefundBooking(null)}
+        />
+      )}
+      {editingRefund && (
+        <RefundModal
+          isMobile={isMobile}
+          booking={editingRefund.booking}
+          existing={editingRefund.refund}
+          onConfirm={handleRefundEdit}
+          onCancel={() => setEditingRefund(null)}
+        />
+      )}
+      {deletingRefund && (
+        <ConfirmModal
+          isMobile={isMobile}
+          title="Delete this refund?"
+          message={`${
+            deletingRefund.refund.tubesRefunded
+          } tubes / RWF ${deletingRefund.refund.amountRefunded.toLocaleString()} refunded on ${formatDate(
+            deletingRefund.refund.refundedAt
+          )} will be restored.`}
+          onConfirm={handleRefundDelete}
+          onCancel={() => setDeletingRefund(null)}
+        />
+      )}
       {editingDelivery && (
         <EditDeliveryModal
           isMobile={isMobile}
@@ -341,7 +461,9 @@ export default function BookingApp() {
         <ConfirmModal
           isMobile={isMobile}
           title="Delete this delivery?"
-          message={`${deletingDelivery.delivery.tubesDelivered} tubes recorded on ${formatDate(
+          message={`${
+            deletingDelivery.delivery.tubesDelivered
+          } tubes recorded on ${formatDate(
             deletingDelivery.delivery.deliveredAt
           )} will be removed.`}
           onConfirm={handleDeleteDeliveryConfirm}
@@ -354,8 +476,10 @@ export default function BookingApp() {
   const deliveredViewProps = {
     bookings,
     onDeliver: setDeliveryBooking,
-    onEditDelivery: (booking: Booking, delivery: Delivery) => setEditingDelivery({ booking, delivery }),
-    onDeleteDelivery: (booking: Booking, delivery: Delivery) => setDeletingDelivery({ booking, delivery }),
+    onEditDelivery: (booking: Booking, delivery: Delivery) =>
+      setEditingDelivery({ booking, delivery }),
+    onDeleteDelivery: (booking: Booking, delivery: Delivery) =>
+      setDeletingDelivery({ booking, delivery }),
   };
 
   // Prevent rendering wrong layout before screen size is known
@@ -370,7 +494,13 @@ export default function BookingApp() {
           justifyContent: "center",
         }}
       >
-        <div style={{ color: "#4a7c59", fontFamily: "Georgia, serif", fontSize: 24 }}>
+        <div
+          style={{
+            color: "#4a7c59",
+            fontFamily: "Georgia, serif",
+            fontSize: 24,
+          }}
+        >
           🍄
         </div>
       </div>
@@ -385,6 +515,7 @@ export default function BookingApp() {
       ["bookings", "📋", "Bookings"],
       ["delivered", "🚚", "Delivered"],
       ["overdue", "⚠️", "Overdue"],
+      ["refunds", "💸", "Refunds"],
       ["form", "➕", "Add"],
       ["report", "📄", "Report"],
     ];
@@ -409,11 +540,19 @@ export default function BookingApp() {
             zIndex: 100,
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontSize: 24 }}>🍄</span>
               <div>
-                <div style={{ fontSize: 15, fontWeight: "bold", color: "#c8e6c9" }}>
+                <div
+                  style={{ fontSize: 15, fontWeight: "bold", color: "#c8e6c9" }}
+                >
                   Miru Mushrooms
                 </div>
               </div>
@@ -442,7 +581,14 @@ export default function BookingApp() {
         <div style={{ padding: "16px 16px 0" }}>
           {mv === "dashboard" && (
             <div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 16 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: 10,
+                  marginBottom: 16,
+                }}
+              >
                 {kpis.map((k) => (
                   <div
                     key={k.label}
@@ -454,8 +600,16 @@ export default function BookingApp() {
                       borderLeft: `3px solid ${k.accent}`,
                     }}
                   >
-                    <div style={{ fontSize: 20, marginBottom: 4 }}>{k.icon}</div>
-                    <div style={{ fontSize: 22, fontWeight: "bold", color: "#c8e6c9" }}>
+                    <div style={{ fontSize: 20, marginBottom: 4 }}>
+                      {k.icon}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 22,
+                        fontWeight: "bold",
+                        color: "#c8e6c9",
+                      }}
+                    >
                       {loading ? "..." : k.value}
                     </div>
                     <div
@@ -473,33 +627,104 @@ export default function BookingApp() {
                 ))}
               </div>
               <ReminderCard bookings={bookings} isMobile={true} />
-              <div style={{ background: "#1a2e1a", border: "1px solid #2d4a2d", borderRadius: 14, padding: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                  <div style={{ fontSize: 14, fontWeight: "bold", color: "#c8e6c9" }}>Recent Bookings</div>
+              <div
+                style={{
+                  background: "#1a2e1a",
+                  border: "1px solid #2d4a2d",
+                  borderRadius: 14,
+                  padding: 16,
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: 12,
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: "bold",
+                      color: "#c8e6c9",
+                    }}
+                  >
+                    Recent Bookings
+                  </div>
                   <button
                     onClick={() => goTo("bookings")}
-                    style={{ fontSize: 12, color: "#4a7c59", background: "none", border: "none", cursor: "pointer", fontFamily: "Georgia, serif" }}
+                    style={{
+                      fontSize: 12,
+                      color: "#4a7c59",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontFamily: "Georgia, serif",
+                    }}
                   >
                     View All →
                   </button>
                 </div>
                 {loading ? (
-                  <div style={{ textAlign: "center", padding: "24px 0", color: "#4a7c59" }}>⏳ Loading...</div>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "24px 0",
+                      color: "#4a7c59",
+                    }}
+                  >
+                    ⏳ Loading...
+                  </div>
                 ) : bookings.length === 0 ? (
-                  <div style={{ textAlign: "center", padding: "24px 0", color: "#4a7c59" }}>
+                  <div
+                    style={{
+                      textAlign: "center",
+                      padding: "24px 0",
+                      color: "#4a7c59",
+                    }}
+                  >
                     <div style={{ fontSize: 32, marginBottom: 8 }}>🌱</div>
                     <div style={{ fontSize: 14 }}>No bookings yet</div>
                   </div>
                 ) : (
                   [...bookings].slice(0, 3).map((b) => (
-                    <div key={b.id} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: "1px solid #2d4a2d" }}>
+                    <div
+                      key={b.id}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        padding: "10px 0",
+                        borderBottom: "1px solid #2d4a2d",
+                      }}
+                    >
                       <div>
-                        <div style={{ fontWeight: "bold", color: "#c8e6c9", fontSize: 14 }}>{b.name}</div>
-                        <div style={{ fontSize: 11, color: "#6a9c6a" }}>📍 {b.location}</div>
+                        <div
+                          style={{
+                            fontWeight: "bold",
+                            color: "#c8e6c9",
+                            fontSize: 14,
+                          }}
+                        >
+                          {b.name}
+                        </div>
+                        <div style={{ fontSize: 11, color: "#6a9c6a" }}>
+                          📍 {b.location}
+                        </div>
                       </div>
                       <div style={{ textAlign: "right" }}>
-                        <div style={{ color: "#4ade80", fontWeight: "bold", fontSize: 14 }}>{b.tubes.toLocaleString()} tubes</div>
-                        <div style={{ fontSize: 11, color: "#6a9c6a" }}>📦 {formatDate(getDeliveryDate(b))}</div>
+                        <div
+                          style={{
+                            color: "#4ade80",
+                            fontWeight: "bold",
+                            fontSize: 14,
+                          }}
+                        >
+                          {b.tubes.toLocaleString()} tubes
+                        </div>
+                        <div style={{ fontSize: 11, color: "#6a9c6a" }}>
+                          📦 {formatDate(getDeliveryDate(b))}
+                        </div>
                       </div>
                     </div>
                   ))
@@ -510,11 +735,14 @@ export default function BookingApp() {
           {mv === "bookings" && (
             <div>
               <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 18, fontWeight: "bold", color: "#c8e6c9" }}>
+                <div
+                  style={{ fontSize: 18, fontWeight: "bold", color: "#c8e6c9" }}
+                >
                   Upcoming Deliveries
                 </div>
                 <div style={{ fontSize: 12, color: "#6a9c6a", marginTop: 3 }}>
-                  {upcomingBookings.length} booking{upcomingBookings.length !== 1 ? "s" : ""} on track ·{" "}
+                  {upcomingBookings.length} booking
+                  {upcomingBookings.length !== 1 ? "s" : ""} on track ·{" "}
                   <span style={{ color: "#4ade80", fontWeight: "bold" }}>
                     {upcomingTubes.toLocaleString()} tubes
                   </span>{" "}
@@ -540,9 +768,23 @@ export default function BookingApp() {
                 }}
               />
               {loading ? (
-                <div style={{ textAlign: "center", padding: "40px 0", color: "#4a7c59" }}>⏳ Loading bookings...</div>
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: "40px 0",
+                    color: "#4a7c59",
+                  }}
+                >
+                  ⏳ Loading bookings...
+                </div>
               ) : filtered.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "50px 0", color: "#4a7c59" }}>
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: "50px 0",
+                    color: "#4a7c59",
+                  }}
+                >
                   <div style={{ fontSize: 40, marginBottom: 12 }}>🌱</div>
                   <div>{search ? "No results found." : "No bookings yet."}</div>
                 </div>
@@ -555,6 +797,7 @@ export default function BookingApp() {
                     onDelete={(id) => setDeleteId(id)}
                     onWhatsApp={setWaBooking}
                     onDeliver={setDeliveryBooking}
+                    onRefund={setRefundBooking}
                   />
                 ))
               )}
@@ -574,12 +817,38 @@ export default function BookingApp() {
               }}
             />
           )}
-          {mv === "delivered" && <DeliveredView {...deliveredViewProps} isMobile={true} />}
+          {mv === "delivered" && (
+            <DeliveredView {...deliveredViewProps} isMobile={true} />
+          )}
           {mv === "overdue" && (
-            <OverdueView bookings={bookings} isMobile={true} onDeliver={setDeliveryBooking} onSendReminder={setReminderBooking} />
+            <OverdueView
+              bookings={bookings}
+              isMobile={true}
+              onDeliver={setDeliveryBooking}
+              onSendReminder={setReminderBooking}
+              onRefund={setRefundBooking}
+            />
+          )}
+          {mv === "refunds" && (
+            <RefundsView
+              bookings={bookings}
+              isMobile={true}
+              onEditRefund={(b, r) =>
+                setEditingRefund({ booking: b, refund: r })
+              }
+              onDeleteRefund={(b, r) =>
+                setDeletingRefund({ booking: b, refund: r })
+              }
+              onNewRefund={setRefundBooking}
+            />
           )}
           {mv === "report" && (
-            <ReportView bookings={bookings} downloading={downloading} onDownload={handleDownloadReport} isMobile={true} />
+            <ReportView
+              bookings={bookings}
+              downloading={downloading}
+              onDownload={handleDownloadReport}
+              isMobile={true}
+            />
           )}
         </div>
 
@@ -615,10 +884,25 @@ export default function BookingApp() {
               }}
             >
               <span style={{ fontSize: 22 }}>{icon}</span>
-              <span style={{ fontSize: 10, color: mv === v ? "#4ade80" : "#6a9c6a", fontFamily: "Georgia, serif" }}>
+              <span
+                style={{
+                  fontSize: 10,
+                  color: mv === v ? "#4ade80" : "#6a9c6a",
+                  fontFamily: "Georgia, serif",
+                }}
+              >
                 {label}
               </span>
-              {mv === v && <div style={{ width: 20, height: 2, borderRadius: 1, background: "#4ade80" }} />}
+              {mv === v && (
+                <div
+                  style={{
+                    width: 20,
+                    height: 2,
+                    borderRadius: 1,
+                    background: "#4ade80",
+                  }}
+                />
+              )}
             </button>
           ))}
         </div>
@@ -634,19 +918,53 @@ export default function BookingApp() {
     ["bookings", "📋 Bookings"],
     ["delivered", "🚚 Delivered"],
     ["overdue", "⚠️ Overdue"],
+    ["refunds", "💸 Refunds"],
     ["add", "➕ New Booking"],
     ["report", "📄 Report"],
   ];
   return (
-    <div style={{ minHeight: "100vh", background: "#0f1a0f", fontFamily: "Georgia, serif", color: "#e8dcc8" }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#0f1a0f",
+        fontFamily: "Georgia, serif",
+        color: "#e8dcc8",
+      }}
+    >
       {sharedModals}
-      <header style={{ background: "#1a2e1a", borderBottom: "1px solid #2d4a2d", padding: "0 24px" }}>
-        <div style={{ maxWidth: 1100, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", height: 64 }}>
+      <header
+        style={{
+          background: "#1a2e1a",
+          borderBottom: "1px solid #2d4a2d",
+          padding: "0 24px",
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 1100,
+            margin: "0 auto",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            height: 64,
+          }}
+        >
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <span style={{ fontSize: 28 }}>🍄</span>
             <div>
-              <div style={{ fontSize: 18, fontWeight: "bold", color: "#c8e6c9" }}>Miru Mushrooms</div>
-              <div style={{ fontSize: 11, color: "#6a9c6a", letterSpacing: 2, textTransform: "uppercase" }}>
+              <div
+                style={{ fontSize: 18, fontWeight: "bold", color: "#c8e6c9" }}
+              >
+                Miru
+              </div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "#6a9c6a",
+                  letterSpacing: 2,
+                  textTransform: "uppercase",
+                }}
+              >
                 Booking Manager
               </div>
             </div>
@@ -684,65 +1002,183 @@ export default function BookingApp() {
         {dv === "dashboard" && (
           <div>
             <div style={{ marginBottom: 32 }}>
-              <h1 style={{ fontSize: 28, fontWeight: "bold", color: "#c8e6c9", margin: 0 }}>Overview</h1>
-              <p style={{ color: "#6a9c6a", marginTop: 4, fontSize: 14 }}>Live summary of all bookings</p>
+              <h1
+                style={{
+                  fontSize: 28,
+                  fontWeight: "bold",
+                  color: "#c8e6c9",
+                  margin: 0,
+                }}
+              >
+                Overview
+              </h1>
+              <p style={{ color: "#6a9c6a", marginTop: 4, fontSize: 14 }}>
+                Live summary of all bookings
+              </p>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 32 }}>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+                gap: 16,
+                marginBottom: 32,
+              }}
+            >
               {kpis.map((k) => (
                 <div
                   key={k.label}
-                  style={{ background: "#1a2e1a", border: "1px solid #2d4a2d", borderRadius: 12, padding: 20, borderLeft: `4px solid ${k.accent}` }}
+                  style={{
+                    background: "#1a2e1a",
+                    border: "1px solid #2d4a2d",
+                    borderRadius: 12,
+                    padding: 20,
+                    borderLeft: `4px solid ${k.accent}`,
+                  }}
                 >
                   <div style={{ fontSize: 24, marginBottom: 8 }}>{k.icon}</div>
-                  <div style={{ fontSize: 26, fontWeight: "bold", color: "#c8e6c9" }}>{loading ? "..." : k.value}</div>
-                  <div style={{ fontSize: 11, color: "#6a9c6a", marginTop: 4, textTransform: "uppercase", letterSpacing: 1 }}>
+                  <div
+                    style={{
+                      fontSize: 26,
+                      fontWeight: "bold",
+                      color: "#c8e6c9",
+                    }}
+                  >
+                    {loading ? "..." : k.value}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: 11,
+                      color: "#6a9c6a",
+                      marginTop: 4,
+                      textTransform: "uppercase",
+                      letterSpacing: 1,
+                    }}
+                  >
                     {k.label}
                   </div>
                 </div>
               ))}
             </div>
             <ReminderCard bookings={bookings} isMobile={false} />
-            <div style={{ background: "#1a2e1a", border: "1px solid #2d4a2d", borderRadius: 12, padding: 24 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 12 }}>
-                <h2 style={{ margin: 0, fontSize: 16, color: "#c8e6c9" }}>Recent Bookings</h2>
+            <div
+              style={{
+                background: "#1a2e1a",
+                border: "1px solid #2d4a2d",
+                borderRadius: 12,
+                padding: 24,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: 20,
+                  flexWrap: "wrap",
+                  gap: 12,
+                }}
+              >
+                <h2 style={{ margin: 0, fontSize: 16, color: "#c8e6c9" }}>
+                  Recent Bookings
+                </h2>
                 <div style={{ display: "flex", gap: 10 }}>
                   <button
                     onClick={() => exportToExcel(bookings)}
-                    style={{ padding: "8px 16px", borderRadius: 8, border: "1px solid #4a7c59", background: "transparent", color: "#c8e6c9", cursor: "pointer", fontSize: 13, fontFamily: "Georgia, serif" }}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: 8,
+                      border: "1px solid #4a7c59",
+                      background: "transparent",
+                      color: "#c8e6c9",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      fontFamily: "Georgia, serif",
+                    }}
                   >
                     ⬇ Download Excel
                   </button>
                   <button
                     onClick={() => goTo("bookings")}
-                    style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "#4a7c59", color: "white", cursor: "pointer", fontSize: 13, fontFamily: "Georgia, serif" }}
+                    style={{
+                      padding: "8px 16px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: "#4a7c59",
+                      color: "white",
+                      cursor: "pointer",
+                      fontSize: 13,
+                      fontFamily: "Georgia, serif",
+                    }}
                   >
                     View All →
                   </button>
                 </div>
               </div>
               {loading ? (
-                <div style={{ textAlign: "center", padding: "32px 0", color: "#4a7c59" }}>⏳ Loading bookings...</div>
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: "32px 0",
+                    color: "#4a7c59",
+                  }}
+                >
+                  ⏳ Loading bookings...
+                </div>
               ) : bookings.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "40px 0", color: "#4a7c59" }}>
+                <div
+                  style={{
+                    textAlign: "center",
+                    padding: "40px 0",
+                    color: "#4a7c59",
+                  }}
+                >
                   <div style={{ fontSize: 40, marginBottom: 12 }}>🌱</div>
                   <div style={{ marginBottom: 16 }}>No bookings yet.</div>
                   <button
                     onClick={() => goTo("add")}
-                    style={{ padding: "10px 24px", borderRadius: 8, border: "none", background: "#4a7c59", color: "white", cursor: "pointer", fontSize: 14, fontFamily: "Georgia, serif" }}
+                    style={{
+                      padding: "10px 24px",
+                      borderRadius: 8,
+                      border: "none",
+                      background: "#4a7c59",
+                      color: "white",
+                      cursor: "pointer",
+                      fontSize: 14,
+                      fontFamily: "Georgia, serif",
+                    }}
                   >
                     ➕ Add First Booking
                   </button>
                 </div>
               ) : (
                 [...bookings].slice(0, 5).map((b) => (
-                  <div key={b.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderBottom: "1px solid #2d4a2d", flexWrap: "wrap", gap: 8 }}>
+                  <div
+                    key={b.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      padding: "14px 0",
+                      borderBottom: "1px solid #2d4a2d",
+                      flexWrap: "wrap",
+                      gap: 8,
+                    }}
+                  >
                     <div>
-                      <div style={{ fontWeight: "bold", color: "#c8e6c9" }}>{b.name}</div>
-                      <div style={{ fontSize: 12, color: "#6a9c6a" }}>📍 {b.location} · 📅 {formatDate(b.bookingDate)}</div>
+                      <div style={{ fontWeight: "bold", color: "#c8e6c9" }}>
+                        {b.name}
+                      </div>
+                      <div style={{ fontSize: 12, color: "#6a9c6a" }}>
+                        📍 {b.location} · 📅 {formatDate(b.bookingDate)}
+                      </div>
                     </div>
                     <div style={{ textAlign: "right" }}>
-                      <div style={{ color: "#4ade80", fontWeight: "bold" }}>{b.tubes.toLocaleString()} tubes</div>
-                      <div style={{ fontSize: 12, color: "#6a9c6a" }}>📦 {formatDate(getDeliveryDate(b))}</div>
+                      <div style={{ color: "#4ade80", fontWeight: "bold" }}>
+                        {b.tubes.toLocaleString()} tubes
+                      </div>
+                      <div style={{ fontSize: 12, color: "#6a9c6a" }}>
+                        📦 {formatDate(getDeliveryDate(b))}
+                      </div>
                     </div>
                   </div>
                 ))
@@ -753,7 +1189,15 @@ export default function BookingApp() {
 
         {/* New / Edit booking — CENTERED on desktop */}
         {dv === "add" && (
-          <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-start", minHeight: "60vh", paddingTop: 16 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "flex-start",
+              minHeight: "60vh",
+              paddingTop: 16,
+            }}
+          >
             <div style={{ width: "100%", maxWidth: 560 }}>
               <BookingForm
                 form={form}
@@ -774,11 +1218,31 @@ export default function BookingApp() {
         {/* Bookings list */}
         {dv === "bookings" && (
           <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24, flexWrap: "wrap", gap: 16 }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                marginBottom: 24,
+                flexWrap: "wrap",
+                gap: 16,
+              }}
+            >
               <div>
-                <h1 style={{ fontSize: 24, fontWeight: "bold", color: "#c8e6c9", margin: 0 }}>Upcoming Deliveries</h1>
+                <h1
+                  style={{
+                    fontSize: 24,
+                    fontWeight: "bold",
+                    color: "#c8e6c9",
+                    margin: 0,
+                  }}
+                >
+                  Upcoming Deliveries
+                </h1>
                 <p style={{ color: "#6a9c6a", marginTop: 4, fontSize: 14 }}>
-                  {upcomingBookings.length} booking{upcomingBookings.length !== 1 ? "s" : ""} on track for delivery ·{" "}
+                  {upcomingBookings.length} booking
+                  {upcomingBookings.length !== 1 ? "s" : ""} on track for
+                  delivery ·{" "}
                   <span style={{ color: "#4ade80", fontWeight: "bold" }}>
                     {upcomingTubes.toLocaleString()} tubes
                   </span>{" "}
@@ -790,28 +1254,75 @@ export default function BookingApp() {
                   placeholder="🔍 Search name, location, phone..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #2d4a2d", background: "#1a2e1a", color: "#e8dcc8", fontSize: 13, fontFamily: "Georgia, serif", width: 240, outline: "none" }}
+                  style={{
+                    padding: "10px 14px",
+                    borderRadius: 8,
+                    border: "1px solid #2d4a2d",
+                    background: "#1a2e1a",
+                    color: "#e8dcc8",
+                    fontSize: 13,
+                    fontFamily: "Georgia, serif",
+                    width: 240,
+                    outline: "none",
+                  }}
                 />
                 <button
                   onClick={() => exportToExcel(bookings)}
-                  style={{ padding: "10px 16px", borderRadius: 8, border: "1px solid #4a7c59", background: "transparent", color: "#c8e6c9", cursor: "pointer", fontSize: 13, fontFamily: "Georgia, serif" }}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: 8,
+                    border: "1px solid #4a7c59",
+                    background: "transparent",
+                    color: "#c8e6c9",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    fontFamily: "Georgia, serif",
+                  }}
                 >
                   ⬇ Excel
                 </button>
                 <button
                   onClick={() => goTo("add")}
-                  style={{ padding: "10px 16px", borderRadius: 8, border: "none", background: "#4a7c59", color: "white", cursor: "pointer", fontSize: 13, fontFamily: "Georgia, serif", fontWeight: "bold" }}
+                  style={{
+                    padding: "10px 16px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "#4a7c59",
+                    color: "white",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    fontFamily: "Georgia, serif",
+                    fontWeight: "bold",
+                  }}
                 >
                   ➕ Add Booking
                 </button>
               </div>
             </div>
             {loading ? (
-              <div style={{ textAlign: "center", padding: "60px 0", color: "#4a7c59" }}>⏳ Loading bookings...</div>
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: "60px 0",
+                  color: "#4a7c59",
+                }}
+              >
+                ⏳ Loading bookings...
+              </div>
             ) : filtered.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "60px 0", color: "#4a7c59" }}>
+              <div
+                style={{
+                  textAlign: "center",
+                  padding: "60px 0",
+                  color: "#4a7c59",
+                }}
+              >
                 <div style={{ fontSize: 48, marginBottom: 16 }}>🌱</div>
-                <div style={{ fontSize: 18 }}>{search ? "No bookings match your search." : "No bookings yet."}</div>
+                <div style={{ fontSize: 18 }}>
+                  {search
+                    ? "No bookings match your search."
+                    : "No bookings yet."}
+                </div>
               </div>
             ) : (
               filtered.map((b) => (
@@ -822,6 +1333,7 @@ export default function BookingApp() {
                   onDelete={(id) => setDeleteId(id)}
                   onWhatsApp={setWaBooking}
                   onDeliver={setDeliveryBooking}
+                  onRefund={setRefundBooking}
                 />
               ))
             )}
@@ -830,17 +1342,50 @@ export default function BookingApp() {
         {dv === "delivered" && (
           <div>
             <div style={{ marginBottom: 24 }}>
-              <h1 style={{ fontSize: 24, fontWeight: "bold", color: "#c8e6c9", margin: 0 }}>Delivered</h1>
-              <p style={{ color: "#6a9c6a", marginTop: 4, fontSize: 14 }}>Track tube delivery progress per farmer</p>
+              <h1
+                style={{
+                  fontSize: 24,
+                  fontWeight: "bold",
+                  color: "#c8e6c9",
+                  margin: 0,
+                }}
+              >
+                Delivered
+              </h1>
+              <p style={{ color: "#6a9c6a", marginTop: 4, fontSize: 14 }}>
+                Track tube delivery progress per farmer
+              </p>
             </div>
             <DeliveredView {...deliveredViewProps} isMobile={false} />
           </div>
         )}
         {dv === "overdue" && (
-          <OverdueView bookings={bookings} isMobile={false} onDeliver={setDeliveryBooking} onSendReminder={setReminderBooking} />
+          <OverdueView
+            bookings={bookings}
+            isMobile={false}
+            onDeliver={setDeliveryBooking}
+            onSendReminder={setReminderBooking}
+            onRefund={setRefundBooking}
+          />
+        )}
+        {dv === "refunds" && (
+          <RefundsView
+            bookings={bookings}
+            isMobile={false}
+            onEditRefund={(b, r) => setEditingRefund({ booking: b, refund: r })}
+            onDeleteRefund={(b, r) =>
+              setDeletingRefund({ booking: b, refund: r })
+            }
+            onNewRefund={setRefundBooking}
+          />
         )}
         {dv === "report" && (
-          <ReportView bookings={bookings} downloading={downloading} onDownload={handleDownloadReport} isMobile={false} />
+          <ReportView
+            bookings={bookings}
+            downloading={downloading}
+            onDownload={handleDownloadReport}
+            isMobile={false}
+          />
         )}
       </main>
       <style suppressHydrationWarning>{cssReset}</style>

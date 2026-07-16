@@ -97,22 +97,26 @@ interface LocationStat {
 
 export function ReportView({ bookings, isMobile, onDownload, downloading }: ReportViewProps) {
   const totalTubes = bookings.reduce((s, b) => s + b.tubes, 0);
+  const totalTubesNet = bookings.reduce((s, b) => s + b.tubesNet, 0);
   const totalRevenue = totalTubes * PRICE_PER_TUBE;
+  const totalRevenueNet = totalTubesNet * PRICE_PER_TUBE;
+  const totalTubesRefunded = bookings.reduce((s, b) => s + (b.tubesRefunded || 0), 0);
+  const totalAmountRefunded = bookings.reduce((s, b) => s + (b.amountRefunded || 0), 0);
 
   const byMonth: Record<string, MonthStat> = {};
   bookings.forEach((b) => {
     const d = new Date(b.bookingDate);
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     if (!byMonth[key]) byMonth[key] = { tubes: 0, count: 0, revenue: 0 };
-    byMonth[key].tubes += b.tubes;
+    byMonth[key].tubes += b.tubesNet;                  // net after refunds
     byMonth[key].count += 1;
-    byMonth[key].revenue += b.tubes * PRICE_PER_TUBE;
+    byMonth[key].revenue += b.tubesNet * PRICE_PER_TUBE;
   });
 
   const byLocation: Record<string, LocationStat> = {};
   bookings.forEach((b) => {
     if (!byLocation[b.location]) byLocation[b.location] = { tubes: 0, count: 0 };
-    byLocation[b.location].tubes += b.tubes;
+    byLocation[b.location].tubes += b.tubesNet;        // net after refunds
     byLocation[b.location].count += 1;
   });
 
@@ -177,16 +181,29 @@ export function ReportView({ bookings, isMobile, onDownload, downloading }: Repo
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(5, 1fr)",
+          gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)",
+          gap: 12,
+          marginBottom: 16,
+        }}
+      >
+        <KpiCard label="Total Bookings" value={bookings.length} accent="#4a7c59" isMobile={isMobile} />
+        <KpiCard label="Net Tubes" value={totalTubesNet.toLocaleString()} accent="#2d6a4f" isMobile={isMobile} />
+        <KpiCard label="Net Revenue (RWF)" value={totalRevenueNet.toLocaleString()} accent="#1b4332" isMobile={isMobile} />
+        <KpiCard label="Upcoming Deliveries" value={upcoming.length} accent="#3d5a3e" isMobile={isMobile} />
+      </div>
+      {/* Refund + overdue secondary KPIs */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)",
           gap: 12,
           marginBottom: 24,
         }}
       >
-        <KpiCard label="Total Bookings" value={bookings.length} accent="#4a7c59" isMobile={isMobile} />
-        <KpiCard label="Total Tubes" value={totalTubes.toLocaleString()} accent="#2d6a4f" isMobile={isMobile} />
-        <KpiCard label="Total Revenue (RWF)" value={totalRevenue.toLocaleString()} accent="#1b4332" isMobile={isMobile} />
-        <KpiCard label="Upcoming Deliveries" value={upcoming.length} accent="#3d5a3e" isMobile={isMobile} />
         <KpiCard label="Overdue Deliveries" value={overdue.length} accent="#dc2626" isMobile={isMobile} />
+        <KpiCard label="Total Refunds" value={bookings.reduce((s, b) => s + (b.refunds || []).length, 0)} accent="#b45309" isMobile={isMobile} />
+        <KpiCard label="Tubes Refunded" value={totalTubesRefunded.toLocaleString()} accent="#92400e" isMobile={isMobile} />
+        <KpiCard label="Amount Refunded (RWF)" value={totalAmountRefunded.toLocaleString()} accent="#78350f" isMobile={isMobile} />
       </div>
 
       {/* Monthly breakdown */}
@@ -270,7 +287,7 @@ export function ReportView({ bookings, isMobile, onDownload, downloading }: Repo
                       <td style={{ ...tdStyle(i), textAlign: "center" }}>{v.count}</td>
                       <td style={tdNum(i)}>{v.tubes.toLocaleString()}</td>
                       <td style={{ ...tdStyle(i), textAlign: "center", color: "#9ab89a" }}>
-                        {totalTubes ? Math.round((v.tubes / totalTubes) * 100) : 0}%
+                        {totalTubesNet ? Math.round((v.tubes / totalTubesNet) * 100) : 0}%
                       </td>
                     </tr>
                   ))}
