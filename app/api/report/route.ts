@@ -5,6 +5,8 @@ import { normalizeBooking, getDeliveryDate, isOverdue } from "@/lib/booking-help
 import { errorMessage } from "@/lib/errorMessage";
 import type { Booking as BookingType } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 const MONTHS_SHORT = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",

@@ -6,6 +6,8 @@ import { normalizeBooking } from "@/lib/booking-helpers";
 import { errorMessage } from "@/lib/errorMessage";
 import type { RefundInput } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 interface RouteParams { params: { id: string; refundId: string } }
 
 // PUT /api/bookings/:id/refunds/:refundId — edit a refund

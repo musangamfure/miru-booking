@@ -6,6 +6,8 @@ import { normalizeBooking, ensureArrayFields } from "@/lib/booking-helpers";
 import { errorMessage } from "@/lib/errorMessage";
 import type { RefundInput } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 interface RouteParams { params: { id: string } }
 
 // GET /api/bookings/:id/refunds

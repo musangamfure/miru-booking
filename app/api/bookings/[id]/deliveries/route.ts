@@ -6,6 +6,8 @@ import { normalizeBooking, ensureDeliveriesArray } from "@/lib/booking-helpers";
 import { errorMessage } from "@/lib/errorMessage";
 import type { DeliveryInput } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 interface RouteParams {
   params: { id: string };
 }

@@ -5,6 +5,8 @@ import { normalizeBooking } from "@/lib/booking-helpers";
 import { errorMessage } from "@/lib/errorMessage";
 import type { BookingFormData } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/bookings
 export async function GET() {
   try {

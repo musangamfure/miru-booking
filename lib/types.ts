@@ -1,10 +1,7 @@
 // ─────────────────────────────────────────────────────────────────
-// Shared domain types. These describe the NORMALIZED shapes that
-// flow between the API and the UI (see lib/booking-helpers.ts on the
-// server and lib/api.ts on the client) — not raw Mongoose documents.
+// Shared domain types — normalized shapes between API and UI.
 // ─────────────────────────────────────────────────────────────────
 
-/** A single recorded delivery against a booking. */
 export interface Delivery {
   id: string;
   tubesDelivered: number;
@@ -12,7 +9,6 @@ export interface Delivery {
   note: string;
 }
 
-/** A single refund against a booking. */
 export interface Refund {
   id: string;
   tubesRefunded: number;
@@ -21,7 +17,14 @@ export interface Refund {
   refundedAt: string;
 }
 
-/** A booking as the UI consumes it — dates are ISO/plain date strings. */
+/** A single payment recorded against a booking. */
+export interface Payment {
+  id: string;
+  amount: number;
+  paidAt: string;
+  note: string;
+}
+
 export interface Booking {
   id: string;
   name: string;
@@ -33,18 +36,24 @@ export interface Booking {
   location: string;
   // Delivery tracking
   tubesDelivered: number;
-  tubesPending: number;    // = tubesNet - tubesDelivered
+  tubesPending: number;     // tubesNet - tubesDelivered
   deliveries: Delivery[];
   // Refund tracking
-  tubesRefunded: number;   // sum of refunds[].tubesRefunded
-  amountRefunded: number;  // sum of refunds[].amountRefunded
-  tubesNet: number;        // tubes - tubesRefunded (net tubes still owed)
+  tubesRefunded: number;
+  amountRefunded: number;
+  tubesNet: number;         // tubes - tubesRefunded
   refunds: Refund[];
+  // Payment tracking
+  amountDue: number;        // tubesNet * PRICE_PER_TUBE
+  amountPaid: number;       // sum of payments[].amount
+  amountBalance: number;    // amountDue - amountPaid
+  /** Date the client promised to pay the remaining balance (ISO date string). */
+  promisedPaymentDate: string;
+  payments: Payment[];
   createdAt?: string;
   updatedAt?: string;
 }
 
-/** Shape of the booking create/edit form (tubes is a string while typing). */
 export interface BookingFormData {
   name: string;
   phone: string;
@@ -54,22 +63,25 @@ export interface BookingFormData {
   location: string;
 }
 
-/** Payload accepted by the create/edit delivery endpoints. */
 export interface DeliveryInput {
   tubesDelivered: number | string;
   note?: string;
 }
 
-/** Payload accepted by the create/edit refund endpoints. */
 export interface RefundInput {
   tubesRefunded: number | string;
   amountRefunded: number | string;
   reason: string;
 }
 
+export interface PaymentInput {
+  amount: number | string;
+  paidAt?: string;
+  note?: string;
+}
+
 export type ApiResult<T> =
   | { success: true; data: T }
   | { success: false; error: string };
 
-/** Where a piece of data ultimately came from — used for the offline banner. */
 export type DataSource = "mongodb" | "localStorage";

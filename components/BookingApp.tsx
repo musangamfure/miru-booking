@@ -24,6 +24,9 @@ import {
   apiCreateRefund,
   apiUpdateRefund,
   apiDeleteRefund,
+  apiCreatePayment,
+  apiUpdatePayment,
+  apiDeletePayment,
 } from "@/lib/api";
 import {
   formatDate,
@@ -31,10 +34,9 @@ import {
   isOverdue,
   exportToExcel,
   EMPTY_FORM,
-  PRICE_PER_TUBE,
 } from "@/lib/utils";
 import { errorMessage } from "@/lib/errorMessage";
-import type { Booking, BookingFormData, Delivery, Refund } from "@/lib/types";
+import type { Booking, BookingFormData, Delivery, Refund, Payment } from "@/lib/types";
 
 import { useIsMobile } from "@/components/booking/hooks/useIsMobile";
 import { Toast, type ToastProps } from "@/components/booking/Toast";
@@ -46,6 +48,7 @@ import { DeliveryModal } from "@/components/booking/modals/DeliveryModal";
 import { EditDeliveryModal } from "@/components/booking/modals/EditDeliveryModal";
 import { ReminderModal } from "@/components/booking/modals/ReminderModal";
 import { RefundModal } from "@/components/booking/modals/RefundModal";
+import { PaymentModal } from "@/components/booking/modals/PaymentModal";
 import { BookingForm } from "@/components/booking/form/BookingForm";
 import { MobileBookingCard } from "@/components/booking/bookingItems/MobileBookingCard";
 import { DesktopBookingRow } from "@/components/booking/bookingItems/DesktopBookingRow";
@@ -53,8 +56,9 @@ import { DeliveredView } from "@/components/booking/views/DeliveredView";
 import { OverdueView } from "@/components/booking/views/OverdueView";
 import { ReportView } from "@/components/booking/views/ReportView";
 import { RefundsView } from "@/components/booking/views/RefundsView";
+import { PaymentsView } from "@/components/booking/views/PaymentsView";
 
-type ViewName = "dashboard" | "bookings" | "delivered" | "overdue" | "add" | "form" | "report" | "refunds";
+type ViewName = "dashboard" | "bookings" | "delivered" | "overdue" | "add" | "form" | "report" | "refunds" | "payments";
 
 interface DeliveryTarget {
   booking: Booking;
@@ -88,6 +92,10 @@ export default function BookingApp() {
   const [refundBooking, setRefundBooking] = useState<Booking | null>(null);
   const [editingRefund, setEditingRefund] = useState<{ booking: Booking; refund: Refund } | null>(null);
   const [deletingRefund, setDeletingRefund] = useState<{ booking: Booking; refund: Refund } | null>(null);
+  // Payment state
+  const [paymentBooking, setPaymentBooking] = useState<Booking | null>(null);
+  const [editingPayment, setEditingPayment] = useState<{ booking: Booking; payment: Payment } | null>(null);
+  const [deletingPayment, setDeletingPayment] = useState<{ booking: Booking; payment: Payment } | null>(null);
   const [editingDelivery, setEditingDelivery] = useState<DeliveryTarget | null>(null);
   const [deletingDelivery, setDeletingDelivery] = useState<DeliveryTarget | null>(null);
 
@@ -225,6 +233,48 @@ export default function BookingApp() {
     }
   };
 
+  const handlePaymentCreate = async (amount: number, paidAt: string, note: string, promisedPaymentDate: string) => {
+    if (!paymentBooking) return;
+    try {
+      const { data } = await apiCreatePayment(paymentBooking.id, { amount, paidAt, note, promisedPaymentDate });
+      setBookings((prev) => prev.map((b) => (b.id === paymentBooking.id ? data : b)));
+      setPaymentBooking(null);
+      showToast(
+        data.amountBalance <= 0
+          ? `Payment of RWF ${amount.toLocaleString()} recorded. Booking fully paid! ✓`
+          : `RWF ${amount.toLocaleString()} recorded. Balance: RWF ${data.amountBalance.toLocaleString()}.`
+      );
+    } catch (err) {
+      showToast(errorMessage(err) || "Could not record payment.", "error");
+    }
+  };
+
+  const handlePaymentEdit = async (amount: number, paidAt: string, note: string, promisedPaymentDate: string) => {
+    if (!editingPayment) return;
+    const { booking, payment } = editingPayment;
+    try {
+      const { data } = await apiUpdatePayment(booking.id, payment.id, { amount, paidAt, note, promisedPaymentDate });
+      setBookings((prev) => prev.map((b) => (b.id === booking.id ? data : b)));
+      setEditingPayment(null);
+      showToast("Payment updated.");
+    } catch (err) {
+      showToast(errorMessage(err) || "Could not update payment.", "error");
+    }
+  };
+
+  const handlePaymentDelete = async () => {
+    if (!deletingPayment) return;
+    const { booking, payment } = deletingPayment;
+    try {
+      const { data } = await apiDeletePayment(booking.id, payment.id);
+      setBookings((prev) => prev.map((b) => (b.id === booking.id ? data : b)));
+      setDeletingPayment(null);
+      showToast("Payment removed.");
+    } catch (err) {
+      showToast(errorMessage(err) || "Could not delete payment.", "error");
+    }
+  };
+
   const goTo = (v: ViewName) => {    setView(v);
     if (v !== "add" && v !== "form") {
       setForm(EMPTY_FORM);
@@ -282,7 +332,6 @@ export default function BookingApp() {
 
   const totalTubes = bookings.reduce((s, b) => s + b.tubes, 0);
   const totalTubesNet = bookings.reduce((s, b) => s + b.tubesNet, 0);
-  const totalRevenue = totalTubesNet * PRICE_PER_TUBE;
   const pendingBookings = bookings.filter(
     (b) => (b.tubesPending ?? b.tubes) > 0
   );
@@ -308,37 +357,15 @@ export default function BookingApp() {
       b.phone.includes(search)
   );
 
+  const totalAmountPaid = bookings.reduce((s, b) => s + (b.amountPaid || 0), 0);
+  const totalAmountBalance = bookings.reduce((s, b) => s + Math.max(0, b.amountBalance || 0), 0);
+
   const kpis: Kpi[] = [
-    {
-      label: "Pending Bookings",
-      value: pendingBookings.length,
-      icon: "📋",
-      accent: "#4a7c59",
-    },
-    {
-      label: "Tubes Pending",
-      value: tubesPending.toLocaleString(),
-      icon: "⏳",
-      accent: "#fbbf24",
-    },
-    {
-      label: "Tubes Booked (Net)",
-      value: totalTubesNet.toLocaleString(),
-      icon: "🌱",
-      accent: "#2d6a4f",
-    },
-    {
-      label: "Revenue (RWF)",
-      value: totalRevenue.toLocaleString(),
-      icon: "💰",
-      accent: "#1b4332",
-    },
-    {
-      label: "Fully Delivered",
-      value: fullyDelivered,
-      icon: "✅",
-      accent: "#1a3d1a",
-    },
+    { label: "Pending Bookings", value: pendingBookings.length, icon: "📋", accent: "#4a7c59" },
+    { label: "Tubes Pending", value: tubesPending.toLocaleString(), icon: "⏳", accent: "#fbbf24" },
+    { label: "Tubes Booked (Net)", value: totalTubesNet.toLocaleString(), icon: "🌱", accent: "#2d6a4f" },
+    { label: "Collected (RWF)", value: totalAmountPaid.toLocaleString(), icon: "💰", accent: "#1b4332" },
+    { label: "Outstanding (RWF)", value: totalAmountBalance.toLocaleString(), icon: totalAmountBalance > 0 ? "⚠" : "✅", accent: totalAmountBalance > 0 ? "#92400e" : "#1a3d1a" },
   ];
 
   const sharedModals = (
@@ -401,6 +428,32 @@ export default function BookingApp() {
           onCancel={() => setDeletingRefund(null)}
         />
       )}
+      {paymentBooking && (
+        <PaymentModal
+          isMobile={isMobile}
+          booking={paymentBooking}
+          onConfirm={handlePaymentCreate}
+          onCancel={() => setPaymentBooking(null)}
+        />
+      )}
+      {editingPayment && (
+        <PaymentModal
+          isMobile={isMobile}
+          booking={editingPayment.booking}
+          existing={editingPayment.payment}
+          onConfirm={handlePaymentEdit}
+          onCancel={() => setEditingPayment(null)}
+        />
+      )}
+      {deletingPayment && (
+        <ConfirmModal
+          isMobile={isMobile}
+          title="Delete this payment?"
+          message={`RWF ${deletingPayment.payment.amount.toLocaleString()} paid on ${formatDate(deletingPayment.payment.paidAt)} will be removed.`}
+          onConfirm={handlePaymentDelete}
+          onCancel={() => setDeletingPayment(null)}
+        />
+      )}
       {editingDelivery && (
         <EditDeliveryModal
           isMobile={isMobile}
@@ -461,6 +514,7 @@ export default function BookingApp() {
       ["form", "➕", "Add"],
     ];
     const mobileNavSecondary: [ViewName, string, string][] = [
+      ["payments", "💰", "Payments"],
       ["refunds", "💸", "Refunds"],
       ["report", "📄", "Report"],
     ];
@@ -617,6 +671,7 @@ export default function BookingApp() {
                     onWhatsApp={setWaBooking}
                     onDeliver={setDeliveryBooking}
                     onRefund={setRefundBooking}
+                    onPay={setPaymentBooking}
                   />
                 ))
               )}
@@ -639,6 +694,15 @@ export default function BookingApp() {
           {mv === "delivered" && <DeliveredView {...deliveredViewProps} isMobile={true} />}
           {mv === "overdue" && (
             <OverdueView bookings={bookings} isMobile={true} onDeliver={setDeliveryBooking} onSendReminder={setReminderBooking} onRefund={setRefundBooking} />
+          )}
+          {mv === "payments" && (
+            <PaymentsView
+              bookings={bookings}
+              isMobile={true}
+              onNewPayment={setPaymentBooking}
+              onEditPayment={(b, p) => setEditingPayment({ booking: b, payment: p })}
+              onDeletePayment={(b, p) => setDeletingPayment({ booking: b, payment: p })}
+            />
           )}
           {mv === "refunds" && (
             <RefundsView
@@ -738,6 +802,7 @@ export default function BookingApp() {
   ];
   // Secondary nav: less frequent, shown as compact text-only pills
   const secondaryNavItems: [ViewName, string][] = [
+    ["payments", "💰 Payments"],
     ["refunds", "💸 Refunds"],
     ["report", "📄 Report"],
   ];
@@ -969,6 +1034,7 @@ export default function BookingApp() {
                   onWhatsApp={setWaBooking}
                   onDeliver={setDeliveryBooking}
                   onRefund={setRefundBooking}
+                  onPay={setPaymentBooking}
                 />
               ))
             )}
@@ -985,6 +1051,15 @@ export default function BookingApp() {
         )}
         {dv === "overdue" && (
           <OverdueView bookings={bookings} isMobile={false} onDeliver={setDeliveryBooking} onSendReminder={setReminderBooking} onRefund={setRefundBooking} />
+        )}
+        {dv === "payments" && (
+          <PaymentsView
+            bookings={bookings}
+            isMobile={false}
+            onNewPayment={setPaymentBooking}
+            onEditPayment={(b, p) => setEditingPayment({ booking: b, payment: p })}
+            onDeletePayment={(b, p) => setDeletingPayment({ booking: b, payment: p })}
+          />
         )}
         {dv === "refunds" && (
           <RefundsView
