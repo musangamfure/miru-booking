@@ -96,6 +96,7 @@ export default function BookingApp() {
   const [paymentBooking, setPaymentBooking] = useState<Booking | null>(null);
   const [editingPayment, setEditingPayment] = useState<{ booking: Booking; payment: Payment } | null>(null);
   const [deletingPayment, setDeletingPayment] = useState<{ booking: Booking; payment: Payment } | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [editingDelivery, setEditingDelivery] = useState<DeliveryTarget | null>(null);
   const [deletingDelivery, setDeletingDelivery] = useState<DeliveryTarget | null>(null);
 
@@ -275,7 +276,9 @@ export default function BookingApp() {
     }
   };
 
-  const goTo = (v: ViewName) => {    setView(v);
+  const goTo = (v: ViewName) => {
+    setMoreOpen(false);
+    setView(v);
     if (v !== "add" && v !== "form") {
       setForm(EMPTY_FORM);
       setEditId(null);
@@ -506,18 +509,25 @@ export default function BookingApp() {
   // ── MOBILE ─────────────────────────────────────────────────
   if (isMobile) {
     const mv: ViewName = view === "add" ? "form" : view;
+
+    // 5 always-visible primary tabs
     const mobileNavPrimary: [ViewName, string, string][] = [
       ["dashboard", "📊", "Home"],
-      ["bookings", "📋", "Bookings"],
+      ["bookings",  "📋", "Bookings"],
+      ["form",      "➕", "Add"],
+      ["overdue",   "⚠️", "Overdue"],
+    ];
+
+    // Secondary items grouped in the ⋮ More menu
+    const mobileNavMore: [ViewName, string, string][] = [
       ["delivered", "🚚", "Delivered"],
-      ["overdue", "⚠️", "Overdue"],
-      ["form", "➕", "Add"],
+      ["payments",  "💰", "Payments"],
+      ["refunds",   "💸", "Refunds"],
+      ["report",    "📄", "Report"],
     ];
-    const mobileNavSecondary: [ViewName, string, string][] = [
-      ["payments", "💰", "Payments"],
-      ["refunds", "💸", "Refunds"],
-      ["report", "📄", "Report"],
-    ];
+
+    const secondaryActive = mobileNavMore.some(([v]) => mv === v);
+
     return (
       <div
         style={{
@@ -525,15 +535,76 @@ export default function BookingApp() {
           background: "#0f1a0f",
           fontFamily: "Georgia, serif",
           color: "#e8dcc8",
-          paddingBottom: 108,
+          // Bottom padding = nav bar height + safe area
+          paddingBottom: "calc(62px + env(safe-area-inset-bottom, 0px))",
+          // Horizontal safe areas for notch/island on iPhone
+          paddingLeft: "env(safe-area-inset-left, 0px)",
+          paddingRight: "env(safe-area-inset-right, 0px)",
         }}
       >
         {sharedModals}
+
+        {/* More menu overlay */}
+        {moreOpen && (
+          <>
+            <div
+              style={{ position: "fixed", inset: 0, zIndex: 199, background: "rgba(0,0,0,0.5)" }}
+              onClick={() => setMoreOpen(false)}
+            />
+            <div
+              style={{
+                position: "fixed",
+                bottom: "calc(62px + env(safe-area-inset-bottom, 0px))",
+                left: "env(safe-area-inset-left, 0px)",
+                right: "env(safe-area-inset-right, 0px)",
+                zIndex: 200,
+                background: "#1a2e1a",
+                borderTop: "1px solid #4a7c59",
+                borderRadius: "16px 16px 0 0",
+                padding: "12px 16px 8px",
+              }}
+            >
+              <div style={{ fontSize: 11, color: "#4a7c59", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, textAlign: "center" }}>
+                More
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                {mobileNavMore.map(([v, icon, label]) => {
+                  const active = mv === v;
+                  return (
+                    <button
+                      key={v}
+                      onClick={() => { goTo(v); setMoreOpen(false); }}
+                      style={{
+                        padding: "14px 10px",
+                        borderRadius: 12,
+                        border: `1px solid ${active ? "#4a7c59" : "#2d4a2d"}`,
+                        background: active ? "#1a3d1a" : "transparent",
+                        cursor: "pointer",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <span style={{ fontSize: 24 }}>{icon}</span>
+                      <span style={{ fontSize: 12, color: active ? "#4ade80" : "#c8e6c9", fontFamily: "Georgia, serif", fontWeight: active ? "bold" : "normal" }}>
+                        {label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Sticky header */}
         <div
           style={{
             background: "#1a2e1a",
             borderBottom: "1px solid #2d4a2d",
             padding: "12px 16px",
+            paddingTop: "calc(12px + env(safe-area-inset-top, 0px))",
             position: "sticky",
             top: 0,
             zIndex: 100,
@@ -542,18 +613,13 @@ export default function BookingApp() {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <span style={{ fontSize: 24 }}>🍄</span>
-              <div>
-                <div style={{ fontSize: 15, fontWeight: "bold", color: "#c8e6c9" }}>
-                  Miru Mushrooms
-                </div>
-              </div>
+              <div style={{ fontSize: 15, fontWeight: "bold", color: "#c8e6c9" }}>Miru Mushrooms</div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <UserMenu session={session} isMobile={true} />
-            </div>
+            <UserMenu session={session} isMobile={true} />
           </div>
         </div>
 
+        {/* Page content */}
         <div style={{ padding: "16px 16px 0" }}>
           {mv === "dashboard" && (
             <div>
@@ -561,29 +627,11 @@ export default function BookingApp() {
                 {kpis.map((k) => (
                   <div
                     key={k.label}
-                    style={{
-                      background: "#1a2e1a",
-                      border: "1px solid #2d4a2d",
-                      borderRadius: 12,
-                      padding: 14,
-                      borderLeft: `3px solid ${k.accent}`,
-                    }}
+                    style={{ background: "#1a2e1a", border: "1px solid #2d4a2d", borderRadius: 12, padding: 14, borderLeft: `3px solid ${k.accent}` }}
                   >
                     <div style={{ fontSize: 20, marginBottom: 4 }}>{k.icon}</div>
-                    <div style={{ fontSize: 22, fontWeight: "bold", color: "#c8e6c9" }}>
-                      {loading ? "..." : k.value}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: "#6a9c6a",
-                        marginTop: 2,
-                        textTransform: "uppercase",
-                        letterSpacing: 0.8,
-                      }}
-                    >
-                      {k.label}
-                    </div>
+                    <div style={{ fontSize: 22, fontWeight: "bold", color: "#c8e6c9" }}>{loading ? "..." : k.value}</div>
+                    <div style={{ fontSize: 11, color: "#6a9c6a", marginTop: 2, textTransform: "uppercase", letterSpacing: 0.8 }}>{k.label}</div>
                   </div>
                 ))}
               </div>
@@ -591,10 +639,7 @@ export default function BookingApp() {
               <div style={{ background: "#1a2e1a", border: "1px solid #2d4a2d", borderRadius: 14, padding: 16 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                   <div style={{ fontSize: 14, fontWeight: "bold", color: "#c8e6c9" }}>Recent Bookings</div>
-                  <button
-                    onClick={() => goTo("bookings")}
-                    style={{ fontSize: 12, color: "#4a7c59", background: "none", border: "none", cursor: "pointer", fontFamily: "Georgia, serif" }}
-                  >
+                  <button onClick={() => goTo("bookings")} style={{ fontSize: 12, color: "#4a7c59", background: "none", border: "none", cursor: "pointer", fontFamily: "Georgia, serif" }}>
                     View All →
                   </button>
                 </div>
@@ -625,37 +670,20 @@ export default function BookingApp() {
           {mv === "bookings" && (
             <div>
               <div style={{ marginBottom: 14 }}>
-                <div style={{ fontSize: 18, fontWeight: "bold", color: "#c8e6c9" }}>
-                  Upcoming Deliveries
-                </div>
+                <div style={{ fontSize: 18, fontWeight: "bold", color: "#c8e6c9" }}>Upcoming Deliveries</div>
                 <div style={{ fontSize: 12, color: "#6a9c6a", marginTop: 3 }}>
                   {upcomingBookings.length} booking{upcomingBookings.length !== 1 ? "s" : ""} on track ·{" "}
-                  <span style={{ color: "#4ade80", fontWeight: "bold" }}>
-                    {upcomingTubes.toLocaleString()} tubes
-                  </span>{" "}
-                  to deliver
+                  <span style={{ color: "#4ade80", fontWeight: "bold" }}>{upcomingTubes.toLocaleString()} tubes</span> to deliver
                 </div>
               </div>
               <input
                 placeholder="🔍 Search..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                style={{
-                  width: "100%",
-                  padding: "12px 14px",
-                  borderRadius: 10,
-                  border: "1px solid #2d4a2d",
-                  background: "#1a2e1a",
-                  color: "#e8dcc8",
-                  fontSize: 14,
-                  fontFamily: "Georgia, serif",
-                  outline: "none",
-                  marginBottom: 14,
-                  boxSizing: "border-box",
-                }}
+                style={{ width: "100%", padding: "12px 14px", borderRadius: 10, border: "1px solid #2d4a2d", background: "#1a2e1a", color: "#e8dcc8", fontSize: 14, fontFamily: "Georgia, serif", outline: "none", marginBottom: 14, boxSizing: "border-box" }}
               />
               {loading ? (
-                <div style={{ textAlign: "center", padding: "40px 0", color: "#4a7c59" }}>⏳ Loading bookings...</div>
+                <div style={{ textAlign: "center", padding: "40px 0", color: "#4a7c59" }}>⏳ Loading...</div>
               ) : filtered.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "50px 0", color: "#4a7c59" }}>
                   <div style={{ fontSize: 40, marginBottom: 12 }}>🌱</div>
@@ -663,61 +691,22 @@ export default function BookingApp() {
                 </div>
               ) : (
                 [...filtered].map((b) => (
-                  <MobileBookingCard
-                    key={b.id}
-                    b={b}
-                    onEdit={handleEdit}
-                    onDelete={(id) => setDeleteId(id)}
-                    onWhatsApp={setWaBooking}
-                    onDeliver={setDeliveryBooking}
-                    onRefund={setRefundBooking}
-                    onPay={setPaymentBooking}
-                  />
+                  <MobileBookingCard key={b.id} b={b} onEdit={handleEdit} onDelete={(id) => setDeleteId(id)} onWhatsApp={setWaBooking} onDeliver={setDeliveryBooking} onRefund={setRefundBooking} onPay={setPaymentBooking} />
                 ))
               )}
             </div>
           )}
           {mv === "form" && (
-            <BookingForm
-              form={form}
-              setForm={setForm}
-              editId={editId}
-              saving={saving}
-              onSave={handleSave}
-              onCancel={() => {
-                setForm(EMPTY_FORM);
-                setEditId(null);
-                goTo("bookings");
-              }}
-            />
+            <BookingForm form={form} setForm={setForm} editId={editId} saving={saving} onSave={handleSave} onCancel={() => { setForm(EMPTY_FORM); setEditId(null); goTo("bookings"); }} />
           )}
           {mv === "delivered" && <DeliveredView {...deliveredViewProps} isMobile={true} />}
-          {mv === "overdue" && (
-            <OverdueView bookings={bookings} isMobile={true} onDeliver={setDeliveryBooking} onSendReminder={setReminderBooking} onRefund={setRefundBooking} />
-          )}
-          {mv === "payments" && (
-            <PaymentsView
-              bookings={bookings}
-              isMobile={true}
-              onNewPayment={setPaymentBooking}
-              onEditPayment={(b, p) => setEditingPayment({ booking: b, payment: p })}
-              onDeletePayment={(b, p) => setDeletingPayment({ booking: b, payment: p })}
-            />
-          )}
-          {mv === "refunds" && (
-            <RefundsView
-              bookings={bookings}
-              isMobile={true}
-              onEditRefund={(b, r) => setEditingRefund({ booking: b, refund: r })}
-              onDeleteRefund={(b, r) => setDeletingRefund({ booking: b, refund: r })}
-              onNewRefund={setRefundBooking}
-            />
-          )}
-          {mv === "report" && (
-            <ReportView bookings={bookings} downloading={downloading} onDownload={handleDownloadReport} isMobile={true} />
-          )}
+          {mv === "overdue" && <OverdueView bookings={bookings} isMobile={true} onDeliver={setDeliveryBooking} onSendReminder={setReminderBooking} onRefund={setRefundBooking} />}
+          {mv === "payments" && <PaymentsView bookings={bookings} isMobile={true} onNewPayment={setPaymentBooking} onEditPayment={(b, p) => setEditingPayment({ booking: b, payment: p })} onDeletePayment={(b, p) => setDeletingPayment({ booking: b, payment: p })} />}
+          {mv === "refunds" && <RefundsView bookings={bookings} isMobile={true} onEditRefund={(b, r) => setEditingRefund({ booking: b, refund: r })} onDeleteRefund={(b, r) => setDeletingRefund({ booking: b, refund: r })} onNewRefund={setRefundBooking} />}
+          {mv === "report" && <ReportView bookings={bookings} downloading={downloading} onDownload={handleDownloadReport} isMobile={true} />}
         </div>
 
+        {/* Bottom nav bar — single row of 5 */}
         <div
           style={{
             position: "fixed",
@@ -728,61 +717,56 @@ export default function BookingApp() {
             borderTop: "1px solid #2d4a2d",
             zIndex: 100,
             paddingBottom: "env(safe-area-inset-bottom, 0px)",
+            paddingLeft: "env(safe-area-inset-left, 0px)",
+            paddingRight: "env(safe-area-inset-right, 0px)",
+            display: "flex",
           }}
         >
-          {/* Primary row */}
-          <div style={{ display: "flex" }}>
-            {mobileNavPrimary.map(([v, icon, label]) => (
-              <button
-                key={v}
-                onClick={() => goTo(v)}
-                style={{
-                  flex: 1,
-                  padding: "9px 0 6px",
-                  border: "none",
-                  background: "transparent",
-                  cursor: "pointer",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 2,
-                }}
-              >
-                <span style={{ fontSize: 21 }}>{icon}</span>
-                <span style={{ fontSize: 10, color: mv === v ? "#4ade80" : "#6a9c6a", fontFamily: "Georgia, serif" }}>
-                  {label}
-                </span>
-                {mv === v && <div style={{ width: 18, height: 2, borderRadius: 1, background: "#4ade80" }} />}
-              </button>
-            ))}
-          </div>
+          {mobileNavPrimary.map(([v, icon, label]) => (
+            <button
+              key={v}
+              onClick={() => goTo(v)}
+              style={{
+                flex: 1,
+                padding: "9px 0 6px",
+                border: "none",
+                background: "transparent",
+                cursor: "pointer",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 2,
+              }}
+            >
+              <span style={{ fontSize: 22 }}>{icon}</span>
+              <span style={{ fontSize: 10, color: mv === v ? "#4ade80" : "#6a9c6a", fontFamily: "Georgia, serif" }}>
+                {label}
+              </span>
+              {mv === v && <div style={{ width: 18, height: 2, borderRadius: 1, background: "#4ade80" }} />}
+            </button>
+          ))}
 
-          {/* Secondary row — compact, for Refunds + Report */}
-          <div style={{ display: "flex", borderTop: "1px solid #0f1a0f", background: "#141f14" }}>
-            {mobileNavSecondary.map(([v, icon, label]) => (
-              <button
-                key={v}
-                onClick={() => goTo(v)}
-                style={{
-                  flex: 1,
-                  padding: "5px 0 4px",
-                  border: "none",
-                  background: "transparent",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: 5,
-                }}
-              >
-                <span style={{ fontSize: 14 }}>{icon}</span>
-                <span style={{ fontSize: 11, color: mv === v ? "#4ade80" : "#4a7c59", fontFamily: "Georgia, serif", fontWeight: mv === v ? "bold" : "normal" }}>
-                  {label}
-                </span>
-                {mv === v && <div style={{ width: 4, height: 4, borderRadius: "50%", background: "#4ade80", marginLeft: 2 }} />}
-              </button>
-            ))}
-          </div>
+          {/* ⋮ More button */}
+          <button
+            onClick={() => setMoreOpen((o) => !o)}
+            style={{
+              flex: 1,
+              padding: "9px 0 6px",
+              border: "none",
+              background: "transparent",
+              cursor: "pointer",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <span style={{ fontSize: 22 }}>⋯</span>
+            <span style={{ fontSize: 10, color: secondaryActive ? "#4ade80" : "#6a9c6a", fontFamily: "Georgia, serif" }}>
+              More
+            </span>
+            {secondaryActive && <div style={{ width: 18, height: 2, borderRadius: 1, background: "#4ade80" }} />}
+          </button>
         </div>
         <style suppressHydrationWarning>{cssReset}</style>
       </div>
